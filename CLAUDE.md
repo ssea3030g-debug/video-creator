@@ -11,6 +11,7 @@
 - 없거나 오래됐으면: `LEMO_OPUSCAR_HOME=$HOME/lemo-opuscar sh $HOME/lemo-opuscar/plugin/skills/lemo-opuscar/scripts/setup.sh` 후 `… setup.sh deps`.
 
 ## 영상 만들기
+- **영상 제작(렌더·믹스·인코딩)은 클라우드 환경 "Video creator"에서 도는 세션에서만 한다.** 다른 환경(Default 등) 세션에서는 기획·주제 고르기·웃김 검증까지만 하고, 제작은 "Video creator" 환경에서 새 세션을 열어 진행하라고 안내한다. 확인: `ls $HOME/lemo-opuscar/core` 와 `ffmpeg -version`(7+)이 없으면 이 환경이 아니다.
 - 지침 순서: `$HOME/lemo-opuscar/AGENTS.md` → `styles/<slug>/STYLE.md` → `DIRECTOR.md` / `TECHNIQUE.md`. 스타일 목록: `styles/README.md`.
 - 프로젝트 폴더는 **이 저장소의 `films/<이름>/`**. 라이브러리 도구는 `cd $HOME/lemo-opuscar && node core/render/… <프로젝트 절대경로>`로 실행.
 - `build.sh` 맨 위: `LIB=${LIB:-$HOME/lemo-opuscar}` (예: `films/dry-gulch/build.sh`).

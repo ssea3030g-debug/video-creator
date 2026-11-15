@@ -146,7 +146,18 @@ add(amb, crick, 17.0, 1, .4)
 a, b = int(21.0 * SR), int(21.5 * SR)
 for buf in (music, fol, amb): buf[a:b] = 0
 
-mix = music * .9 + fol * 1.0 + amb
+# ---------------- 내레이션 (vo.py → voice/vo.wav, Adam) : 압축 후 음악을 그 아래로 덕킹 ----------------
+vo, vsr = sf.read(os.path.join(D, 'voice', 'vo.wav'), dtype='float32')
+assert vsr == SR, vsr
+vo = np.pad(vo, (0, max(0, N - len(vo))))[:N]
+vo = compress(vo.astype(np.float64), .2, 3.0).astype(np.float32)
+vo = vo / max(1e-6, np.sqrt(np.mean(vo[np.abs(vo) > .02] ** 2))) * .16   # 말하는 구간 RMS 기준
+from scipy.ndimage import maximum_filter1d, uniform_filter1d
+act = (maximum_filter1d(np.abs(vo), int(.25 * SR)) > .01).astype(np.float32)
+duck = 1 - .62 * np.clip(uniform_filter1d(act, int(.12 * SR)), 0, 1)       # 약 −8.5dB
+music *= duck[:, None]; amb *= (1 - .3 * (1 - duck))[:, None]
+
+mix = music * .9 + fol * 1.0 + amb + np.stack([vo, vo], 1)
 mix = limit(mix * .8, .92)
 os.makedirs(os.path.join(D, 'out'), exist_ok=True)
 sf.write(os.path.join(D, 'out', 'mix.wav'), mix, SR)

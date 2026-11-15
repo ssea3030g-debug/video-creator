@@ -1,0 +1,12 @@
+42분 터널 (gravity-tunnel) — credits
+
+Picture, score and sound: made entirely in code (Canvas 2D + numpy synthesis). No samples, no stock footage, no generated images.
+Style: "Oscilloscope Math" from the Lemo-Opuscar library (style docs CC BY-NC; engine tools MIT).
+Engine code in this folder (main.js, mix.py, subs.py, build.sh): MIT License.
+
+Fonts (SIL Open Font License 1.1, self-hosted in fonts/):
+- Noto Serif KR SemiBold (subset) — Google Fonts, https://fonts.google.com/noto/specimen/Noto+Serif+KR
+- JetBrains Mono Regular/SemiBold — JetBrains, https://github.com/JetBrains/JetBrainsMono
+- STIX Two Text Italic — STI Pub Companies, https://github.com/stipub/stixfonts
+
+Facts and sources: see FACTS.md.

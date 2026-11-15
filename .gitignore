@@ -1,0 +1,4 @@
+films/*/out/
+films/*/stills/
+films/*/mix.wav
+films/*/events.json

@@ -37,4 +37,5 @@
 
 ## 주제 고르기 (웃김 검증)
 - 영상 만들기 전에 `funny-court` 스킬로 주제를 거른다: 오피스(`funny-office`) → 패널(`funny-panel`, 페르소나는 `.claude/skills/funny-court/personas.md`) → 법정(`funny-court`). 결과는 `films/_ideas/`.
+- 역할 분담: 기획 세션은 주제 기획과 웃김 검증까지, 제작·수정은 "Video creator" 환경의 제작 세션이 맡는다. 확정된 기획은 한 페이지(제목, 훅, 비트, 엔딩, 스타일, 내레이션·목소리, 비율, 사실·출처)로 제작 세션에 보낸다.
 - 교훈: `gravity-tunnel`처럼 교과서·숫자 위주, 캐릭터 없음, 첫 3초 훅 약함은 피한다.

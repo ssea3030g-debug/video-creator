@@ -33,3 +33,7 @@
 - Lemo-Opuscar로 만든 영상은 상업 이용 가능. 엔진 코드는 MIT(소스 배포 시 저작권·라이선스 문구 포함).
 - 스타일 문서 자체를 판매하거나 상업 서비스에 넣는 것은 불가(CC BY-NC + 별도 상업 라이선스).
 - 외부 효과음·이미지는 CC0/CC BY만, CREDITS에 출처 기록.
+
+## 주제 고르기 (웃김 검증)
+- 영상 만들기 전에 `funny-court` 스킬로 주제를 거른다: 오피스(`funny-office`) → 패널(`funny-panel`, 페르소나는 `.claude/skills/funny-court/personas.md`) → 법정(`funny-court`). 결과는 `films/_ideas/`.
+- 교훈: `gravity-tunnel`처럼 교과서·숫자 위주, 캐릭터 없음, 첫 3초 훅 약함은 피한다.

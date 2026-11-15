@@ -1,0 +1,23 @@
+똥 작전 (sloth-mission) — credits & licences
+
+ORIGINAL (이 폴더의 코드로 만듦)
+- 모든 그림: 나무늘보·아기 늘보·맹수 캐릭터, 배경, 칠판, 달력, 자막 카드 (chars.js, film.js)
+- 음악: 오리지널 쿨재즈 스코어, 코드로 작곡 (mix.py)
+- 효과음: 모두 합성 (mix.py, 라이브러리 core/audio/sfx.py 도우미 사용)
+- 이야기·대사·캐릭터는 오리지널
+
+ENGINE CODE
+- engine/toon.js: Lemo-Opuscar by Lemomo (https://github.com/lemomo-ai/lemo-opuscar), midcentury-toon 스타일 엔진, MIT License. 변경 없음.
+
+SAMPLES
+- Vibraphone (soft/hard mallets): Versilian Community Sample Library (Versilian Studios), CC0
+- Jazz pizzicato double bass "Sneakybass": Karoryfer Samples / sfzinstruments, CC0
+
+FONTS (SIL Open Font License 1.1, 사용 글자만 서브셋 — tools/fonts.sh가 Google Fonts에서 받음)
+- Black Han Sans — Zess Type
+- Jua — Woowahan Brothers
+
+FACTS
+- 세가락나무늘보는 약 일주일에 한 번 땅으로 내려와 배변한다:
+  https://www.livescience.com/42744-why-sloths-leave-trees-to-poop.html
+  https://phys.org/news/2014-01-sloth-biologists.html

@@ -2,3 +2,4 @@ out/
 mix.wav
 events.json
 films/*/fonts/*.ttf
+films/*/voice/vo.wav

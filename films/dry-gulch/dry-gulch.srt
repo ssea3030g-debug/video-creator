@@ -1,0 +1,27 @@
+1
+00:00:05,400 --> 00:00:09,000
+MAIN STREET · 11:59 AM
+
+2
+00:00:13,700 --> 00:00:17,400
+BLACK HAT blocks the road!
+
+3
+00:00:18,300 --> 00:00:21,900
+KID: Nobody has to die today.
+
+4
+00:00:22,000 --> 00:00:24,950
+BLACK HAT: Then draw, kid.
+
+5
+00:00:31,000 --> 00:00:33,800
+CRITICAL HIT!
+
+6
+00:00:33,900 --> 00:00:37,000
+BLACK HAT ran away!
+
+7
+00:00:37,100 --> 00:00:40,500
+KID learned QUICK DRAW!

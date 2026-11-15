@@ -1,0 +1,17 @@
+Dry Gulch — credits & licences
+
+ORIGINAL (made for this film, by code in this folder)
+- All pixel art: KID and BLACK HAT (code rig + hand-placed ASCII heads/hats), portraits, eye close-ups, the town,
+  mesas, tumbleweed, title card, UI windows. (cowboy.js, scenes.js, main.js)
+- Music: original chiptune synthesised with numpy (mix.py). All melodies original.
+- Sound effects: all synthesised (mix.py, with helpers from the library's core/audio/sfx.py).
+- Story, characters and place names are original.
+
+ENGINE CODE
+- px.js, font.js (original pixel font) and parts of ui.js are adapted from the pixel-rpg engine of
+  Lemo-Opuscar by Lemomo (LemoLab), https://github.com/lemomo-ai/lemo-opuscar — MIT License. Changed: sunset/evening LUTs, 2×2 command menu, status window.
+
+PALETTE
+- ENDESGA 32 by ENDESGA (public palette, lospec.com/palette-list/endesga-32), used as a colour list.
+
+No third-party images, fonts, samples, recordings or voices are used.

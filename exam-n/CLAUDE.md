@@ -46,3 +46,6 @@
   ```
 - 본문 `NanumMyeongjo`, 제목·번호 `NanumGothic`(경로 `/usr/share/fonts/truetype/nanum/`). reportlab에서 `TTFont`로 등록해 쓴다. ①~⑤, ㉠~㉤, ㉮~㉱ 출력 확인됨.
 - 도구: reportlab, LibreOffice(`soffice`), pandoc이 있다.
+
+## 작업 분담·토큰 계획
+- 문항 제작 전에 `WORKFLOW.md`를 읽는다(스크립트·무료 모델·서브에이전트·본체의 역할 분담, 맹검 풀이 판정 기준).

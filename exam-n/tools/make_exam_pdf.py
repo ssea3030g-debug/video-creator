@@ -19,12 +19,12 @@ HAS_HAND = ord("☞") in TTFont("WQYx", "/usr/share/fonts/truetype/wqy/wqy-zenhe
 
 CSS = """
 @page { size: A4; margin: 23mm 11mm 21mm 11mm; }
-html { font-family: 'Noto Sans CJK KR', sans-serif; font-size: 8.1pt; }
-body { margin: 0; line-height: 1.44; text-align: justify; word-break: break-all; }
+html { font-family: 'Noto Sans CJK KR', sans-serif; font-size: 8.9pt; }
+body { margin: 0; line-height: 1.5; text-align: justify; word-break: break-all; }
 .cols { column-count: 2; column-gap: 8mm; column-fill: auto; }
 .one { column-count: 1; }
 table.hd { column-span: all; width: 100%; border-collapse: collapse; margin: 0 0 7px; font-size: 9.2pt; }
-table.hd td { border: 1pt solid #000; text-align: center; padding: 3px 2px; height: 20px; }
+table.hd td { border: 1pt solid #000; text-align: center; padding: 3px 2px; height: 26px; }
 .inst { border: .9pt solid #000; padding: 4px 6px; margin-bottom: 7px; line-height: 1.8; text-align: left; }
 .dg { display: inline-block; border: .9pt solid #000; width: 1.25em; text-align: center; line-height: 1.15; }
 .set { font-weight: 700; margin: 3px 0 4px; }
@@ -39,7 +39,7 @@ table.hd td { border: 1pt solid #000; text-align: center; padding: 3px 2px; heig
 .bogi .bt span { background: #fff; padding: 0 4px; }
 .bogi div { text-indent: 0; }
 .bogi div.f { text-indent: .9em; }
-.bt2 { border-collapse: collapse; margin: 4px auto 4px; font-size: 7.6pt; line-height: 1.3; }\n.bt2 th, .bt2 td { border: .6pt solid #000; padding: 2px 3px; text-align: center; }\n.psg p.gap { margin-top: 7px; }\n.psg p.fn { font-size: 7.3pt; text-indent: 0; margin-top: 4px; }\n.end { text-align: right; margin-top: 12px; }
+.bt2 { border-collapse: collapse; margin: 4px auto 4px; font-size: 7.6pt; line-height: 1.3; }\n.bt2 th, .bt2 td { border: .6pt solid #000; padding: 2px 3px; text-align: center; }\n.psg p.gap { margin-top: 7px; }\n.psg p.fn { font-size: 7.3pt; text-indent: 0; margin-top: 4px; }\n.ansline { margin: 7px 0 0 4px; }\n.psg p.gap { margin-top: 7px; }\n.end { text-align: right; margin-top: 12px; }
 .ans h2 { font-size: 11pt; margin: 4px 0 4px; }
 .ans h3 { font-size: 9.6pt; margin: 8px 0 3px; }
 .ans table { border-collapse: collapse; margin: 3px 0 6px; }
@@ -86,6 +86,8 @@ def question_html(qb):
     for l in lines[1:]:
         if re.match(r"^[①②③④⑤]", l):
             out.append(f'<div class="opt">{esc(l)}</div>')
+        elif l.strip() and not l.startswith(">"):
+            out.append(f'<div class="ansline">{esc(l)}</div>')
     out.append("</div>")
     return "\n".join(out)
 
@@ -95,7 +97,7 @@ def build_exam_html(body, passage, setline, fig_b64, nq):
         t = mark(esc(p))
         if i == 1 and fig_b64:
             t = f'<img class="fig" src="data:image/png;base64,{fig_b64}">' + t
-        cls = "gap" if p.startswith("(나)") else ("fn" if p.startswith("* ") else "")
+        cls = "gap" if p.startswith(("(나)", "(다)")) else ("fn" if p.startswith("* ") else "")
         ps.append(f'<p class="{cls}">{t}</p>')
     hd = ('<table class="hd"><tr><td style="width:9.5%">실시일</td><td style="width:41%">2026년 &nbsp; 월 &nbsp; 일 &nbsp; 교시</td>'
           '<td rowspan="2" style="width:3.5%">결<br>재</td><td style="width:9%">교과주임</td><td style="width:9%">계</td>'

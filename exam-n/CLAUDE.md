@@ -45,7 +45,9 @@
   apt-get update -q && apt-get install -y -q fonts-nanum fonts-noto-cjk
   ```
 - 본문 `NanumMyeongjo`, 제목·번호 `NanumGothic`(경로 `/usr/share/fonts/truetype/nanum/`). reportlab에서 `TTFont`로 등록해 쓴다. ①~⑤, ㉠~㉤, ㉮~㉱ 출력 확인됨.
-- 도구: reportlab, LibreOffice(`soffice`), pandoc이 있다.
+- 시험지 PDF는 `tools/make_exam_pdf.py`로 만든다(모의고사 v2 양식: 고딕, 2단, 결재란, 쪽번호 배지, 정답·해설 쪽). 기준 양식은 `docs/독서-고난도-모의고사-v2.pdf`. Chromium(Playwright)로 인쇄하므로 `fonts-noto-cjk`도 필요하다.
+- 사용: `python3 -I tools/make_exam_pdf.py <문항.md> <지문.md> <출력.pdf> "독서 고난도 모의고사" "[1~4] 다음 글을 읽고 물음에 답하시오." [그림.png]`
+- 도구: reportlab, pypdf, LibreOffice(`soffice`), pandoc이 있다.
 
 ## 작업 분담·토큰 계획
 - 문항 제작 전에 `WORKFLOW.md`를 읽는다(스크립트·무료 모델·서브에이전트·본체의 역할 분담, 맹검 풀이 판정 기준).

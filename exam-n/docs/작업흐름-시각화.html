@@ -1,0 +1,43 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>모의고사·n제 작업 흐름</title>
+<style>
+body{font-family:"Noto Sans CJK KR",sans-serif;background:#f6f7f9;color:#222;margin:0;padding:16px;max-width:900px;margin:auto}
+h1{font-size:20px}h2{font-size:17px;margin:28px 0 10px}
+.flow{display:flex;flex-direction:column;align-items:stretch;gap:0}
+.box{background:#fff;border:2px solid #4b6cb7;border-radius:10px;padding:10px 14px}
+.box b{color:#2a4a9a}.box small{display:block;color:#555;margin-top:4px;line-height:1.5}
+.arrow{text-align:center;color:#4b6cb7;font-size:18px;line-height:22px}
+.warn{border-color:#d9534f}.warn b{color:#b52b27}
+.ok{border-color:#2e8b57}.ok b{color:#1d6b3f}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}td,th{border:1px solid #ccc;padding:5px 8px;text-align:left}th{background:#e9eef9}
+</style>
+<h1>① 모의고사(9세트·33문항) 따라갈 순서</h1>
+<div class="flow">
+<div class="box"><b>0. ★최우선 원칙</b><small>정답이 한눈에 보이면 실패. 지문은 원문 그대로(띄어쓰기만 복원).</small></div><div class="arrow">▼</div>
+<div class="box"><b>1. 세트 구성 (8-3)</b><small>지문별로 문항 배치: 전개방식 → 세부 내용 → 추론 → &lt;보기&gt; 적용 → 어휘/단답형. 법=날짜 사례, 과학=수치 표, 2지문=융합 &lt;보기&gt;.</small></div><div class="arrow">▼</div>
+<div class="box"><b>2. 난이도·배점 (난이도 기준 지침서)</b><small>L1 2.4–2.5 / L2 2.6–2.9 / L3 3.0–3.2 / L4 3.3 — 근거 지점 개수로 결정. 배점은 결과이지 목표가 아님.</small></div><div class="arrow">▼</div>
+<div class="box"><b>3. 선지 작성 (8-4, 12장)</b><small>인문 평균 80–86자 · 전개방식/종합 ≈100자 · 선지 길이 평균 ±35% · 극단어 오답 ≤1 · 복수정답 금지 · 계산 2단계 이하.</small></div><div class="arrow">▼</div>
+<div class="box"><b>4. 오답 기법 (4장 6종)</b><small>한 문항의 오답 4개는 서로 다른 기법으로. 3-1: 공통점은 맞게, 차이점에서 틀리게.</small></div><div class="arrow">▼</div>
+<div class="box"><b>5. 배치 (11-2)</b><small>선지의 지문 순서 3:2 / 2:3 섞기 · 교차 선지는 ④⑤ · 정답이 가장 긴 문항 ≤ 40% · 정답 위치 고르게.</small></div><div class="arrow">▼</div>
+<div class="box warn"><b>6. 검증 (경량 모드)</b><small>스크립트: 길이 · 분포 · 극성 · 배점 / 무료 모델 블라인드 풀이 최대 1회 / 어휘 사전 확인 / 날짜·수치 계산 재검산. 서브에이전트 기본 금지.</small></div><div class="arrow">▼</div>
+<div class="box"><b>7. 해설</b><small>첫 줄 = 근거 지점 → 마지막 줄 "난이도: L? (…)".</small></div><div class="arrow">▼</div>
+<div class="box ok"><b>8. 빌드·저장</b><small><code>make_exam_multi.py</code> → PDF(문제+정답표+배점표+해설) → 작업 브랜치에 커밋·푸시 (main은 요청 시에만).</small></div>
+</div>
+
+<h1>② n제(지문 1개 → 4~5문항) 따라갈 순서</h1>
+<div class="flow">
+<div class="box"><b>1. 지문 확정</b><small>원문 추출 → <code>build_passage.py</code>로 글자 동일성 검증. 복합 지문이면 (가)+(나) 연결 소재 정하기.</small></div><div class="arrow">▼</div>
+<div class="box"><b>2. 문항 배분 (4~5개)</b><small>전개방식/내용일치 1 · 추론 1 · &lt;보기&gt; 적용 1~2 · 어휘 또는 단답 1. L2~L4 골고루.</small></div><div class="arrow">▼</div>
+<div class="box"><b>3. 작성 → 같은 규칙 적용</b><small>위 ①의 3~5단계(길이, 오답 기법, 배치)를 그대로.</small></div><div class="arrow">▼</div>
+<div class="box warn"><b>4. v2 비교 점검</b><small>v2 같은 유형 문항과 선지 길이·근거 개수·함정 수준 비교. 정답이 보이는 문항은 재작성.</small></div><div class="arrow">▼</div>
+<div class="box ok"><b>5. PDF</b><small><code>make_exam_pdf.py</code> (단일 세트 v2 양식) → 커밋·푸시.</small></div>
+</div>
+
+<h2>빠른 체크표</h2>
+<table><tr><th>항목</th><th>기준</th></tr>
+<tr><td>선지 평균 길이</td><td>인문 80–86자 / 전개방식 ≈100자 / 어휘 짧게</td></tr>
+<tr><td>정답이 가장 긴 비율</td><td>≤ 40% (v3 현재 39%)</td></tr>
+<tr><td>극단어 오답</td><td>한 문항 1개 이하</td></tr>
+<tr><td>오답 기법</td><td>문항당 서로 다른 기법 4개</td></tr>
+<tr><td>해설</td><td>근거 지점 → … → 난이도</td></tr></table>

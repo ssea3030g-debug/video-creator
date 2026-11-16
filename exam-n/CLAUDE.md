@@ -38,3 +38,11 @@
 - 문항을 만들 때는 출제 분석 지침서 맨 앞의 「★ 최우선 원칙: 정답 선지가 '보이면' 실패다」를 먼저 지킨다. 정답이 지문 한 문장을 옮겼거나, 지문 없이 보이는 오답이 둘 이상이면 중간고사보다 쉬워진다.
 - 틀린 선지는 대부분 앞절이 맞고 뒷절에서 틀리게, 맞는 선지에도 이중 부정·양보절을 섞는다.
 - 지문은 원문만 쓰고(새 지문 금지), 두 지문을 (가)(나)로 엮는 것은 모의고사용이며 n제는 지문당 4문항으로 분리한다.
+
+## 시험지 PDF 만들 때 (한글 폰트)
+- 컨테이너 기본에는 한글 폰트가 없다. PDF를 만들기 전에 설치한다(이미 있으면 건너뜀; 확인: `fc-list :lang=ko | grep -i nanum`):
+  ```bash
+  apt-get update -q && apt-get install -y -q fonts-nanum fonts-noto-cjk
+  ```
+- 본문 `NanumMyeongjo`, 제목·번호 `NanumGothic`(경로 `/usr/share/fonts/truetype/nanum/`). reportlab에서 `TTFont`로 등록해 쓴다. ①~⑤, ㉠~㉤, ㉮~㉱ 출력 확인됨.
+- 도구: reportlab, LibreOffice(`soffice`), pandoc이 있다.

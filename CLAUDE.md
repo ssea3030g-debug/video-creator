@@ -4,11 +4,25 @@
 
 ## 기본
 - 항상 한국어로 답한다.
-- 클라우드 환경 "Video creator"의 setup script가 미리 설치해 둔다:
-  - Lemo-Opuscar 라이브러리 `$HOME/lemo-opuscar` (npm 패키지, headless 브라우저, `.venv`)
-  - ffmpeg 7 (`/usr/local/bin/ffmpeg`)
-  - MarkItDown (`markitdown`)
-- 없거나 오래됐으면: `LEMO_OPUSCAR_HOME=$HOME/lemo-opuscar sh $HOME/lemo-opuscar/plugin/skills/lemo-opuscar/scripts/setup.sh` 후 `… setup.sh deps`.
+- 클라우드 환경 "실험실"의 setup script가 미리 설치해 둔다: MarkItDown(`markitdown`), 포니테일·그래피파이 스킬, FreeLLMAPI(`~/freellmapi`).
+- **ffmpeg 7과 Lemo-Opuscar는 미리 설치하지 않는다. 사용자가 요청할 때만 설치한다.** 영상 제작을 요청받았는데 없으면 먼저 설치할지 묻지 말고 아래대로 설치한 뒤 진행한다.
+
+### 요청 시 설치
+- Lemo-Opuscar (`$HOME/lemo-opuscar`: npm 패키지, headless 브라우저, `.venv`):
+  ```bash
+  export LEMO_OPUSCAR_HOME="$HOME/lemo-opuscar"
+  rm -rf /tmp/lemo-src && git clone -q --depth 1 https://github.com/lemomo-ai/lemo-opuscar.git /tmp/lemo-src
+  sh /tmp/lemo-src/plugin/skills/lemo-opuscar/scripts/setup.sh
+  sh /tmp/lemo-src/plugin/skills/lemo-opuscar/scripts/setup.sh deps
+  rm -rf /tmp/lemo-src
+  ```
+- ffmpeg 7 (`/usr/local/bin/ffmpeg`; 이미지 기본은 6.x라서 Lemo-Opuscar의 mux 단계에 7 이상이 필요):
+  ```bash
+  curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar xJ -C /opt
+  ln -sf /opt/ffmpeg-*-amd64-static/ffmpeg /usr/local/bin/ffmpeg
+  ln -sf /opt/ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ffprobe
+  ```
+- 이미 있으면(`ffmpeg -version`이 7 이상, `~/lemo-opuscar` 존재) 다시 설치하지 않는다.
 
 ## 영상 만들기
 - 지침 순서: `$HOME/lemo-opuscar/AGENTS.md` → `styles/<slug>/STYLE.md` → `DIRECTOR.md` / `TECHNIQUE.md`. 스타일 목록: `styles/README.md`.

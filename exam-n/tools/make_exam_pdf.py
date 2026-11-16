@@ -39,7 +39,7 @@ table.hd td { border: 1pt solid #000; text-align: center; padding: 3px 2px; heig
 .bogi .bt span { background: #fff; padding: 0 4px; }
 .bogi div { text-indent: 0; }
 .bogi div.f { text-indent: .9em; }
-.end { text-align: right; margin-top: 12px; }
+.bt2 { border-collapse: collapse; margin: 4px auto 4px; font-size: 7.6pt; line-height: 1.3; }\n.bt2 th, .bt2 td { border: .6pt solid #000; padding: 2px 3px; text-align: center; }\n.psg p.gap { margin-top: 7px; }\n.psg p.fn { font-size: 7.3pt; text-indent: 0; margin-top: 4px; }\n.end { text-align: right; margin-top: 12px; }
 .ans h2 { font-size: 11pt; margin: 4px 0 4px; }
 .ans h3 { font-size: 9.6pt; margin: 8px 0 3px; }
 .ans table { border-collapse: collapse; margin: 3px 0 6px; }
@@ -70,8 +70,18 @@ def question_html(qb):
     bogi = [re.sub(r"^- ", "", b) for b in bogi if b]
     if bogi:
         out.append('<div class="bogi"><div class="bt"><span>&lt; 보 기 &gt;</span></div>')
-        for i, b in enumerate(bogi):
-            out.append(f'<div class="{"f" if i == 0 else ""}">{esc(b)}</div>')
+        i = 0
+        while i < len(bogi):
+            if bogi[i].startswith("|"):
+                rows = []
+                while i < len(bogi) and bogi[i].startswith("|"):
+                    if not set(bogi[i].replace("|", "").strip()) <= set("-: "):
+                        rows.append([c.strip() for c in bogi[i].strip("|").split("|")])
+                    i += 1
+                out.append('<table class="bt2"><tr>' + "".join(f"<th>{esc(c)}</th>" for c in rows[0]) + "</tr>" +
+                           "".join("<tr>" + "".join(f"<td>{esc(c)}</td>" for c in r) + "</tr>" for r in rows[1:]) + "</table>")
+                continue
+            out.append(f'<div class="{"f" if i == 0 else ""}">{esc(bogi[i])}</div>'); i += 1
         out.append("</div>")
     for l in lines[1:]:
         if re.match(r"^[①②③④⑤]", l):
@@ -85,7 +95,8 @@ def build_exam_html(body, passage, setline, fig_b64, nq):
         t = mark(esc(p))
         if i == 1 and fig_b64:
             t = f'<img class="fig" src="data:image/png;base64,{fig_b64}">' + t
-        ps.append(f"<p>{t}</p>")
+        cls = "gap" if p.startswith("(나)") else ("fn" if p.startswith("* ") else "")
+        ps.append(f'<p class="{cls}">{t}</p>')
     hd = ('<table class="hd"><tr><td style="width:9.5%">실시일</td><td style="width:41%">2026년 &nbsp; 월 &nbsp; 일 &nbsp; 교시</td>'
           '<td rowspan="2" style="width:3.5%">결<br>재</td><td style="width:9%">교과주임</td><td style="width:9%">계</td>'
           '<td style="width:9%">부장</td><td style="width:9%">교감</td><td style="width:9%">교장</td></tr>'
@@ -138,8 +149,8 @@ def overlay(src, dst, title, badge_mode, two_col, last_note):
         c.setLineWidth(.9); c.roundRect(W - 30.5 - bw, Hh - 56, bw, 17, 6, stroke=1, fill=0)
         c.setFont("GB", 9); c.drawCentredString(W - 30.5 - bw / 2, Hh - 50, f"{pg}/{n}" if badge_mode == "num" else "교사용")
         c.setLineWidth(1.6); c.line(30.5, Hh - 59.5, W - 30.5, Hh - 59.5)
-        if two_col:
-            c.setLineWidth(.6); c.line(W / 2, Hh - 61, W / 2, 62)
+        if two_col:  # 1쪽은 결재칸 표 아래(Hh-105)부터, 나머지는 머리말 선 아래부터
+            c.setLineWidth(.6); c.line(W / 2, Hh - (105 if pg == 1 else 61), W / 2, 62)
         c.setFont("G", 8.6)
         c.drawString(40, 43, "이 시험문제의 저작권은 학교에 있습니다.")
         c.drawString(40, 31, "저작권법에 의해 보호받는 저작물이므로 전재와 복제는 금지되며, 이를 어길 시 저작권법에 의거 처벌될 수 있습니다.")

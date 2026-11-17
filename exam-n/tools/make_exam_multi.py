@@ -12,7 +12,7 @@ def split_sets(text):
     for blk in re.split(r"(?=^## SET )", text, flags=re.M)[1:]:
         head, _, rest = blk.partition("\n")
         parts = [x.strip() for x in head[len("## SET"):].split("|")]
-        out.append(dict(n=parts[0], rng=re.sub(r",\s*단답형\s*\d+", "", parts[1]), file=parts[2], fig=(len(parts) > 3 and parts[3] == "fig"), body=rest))
+        out.append(dict(n=parts[0], rng=re.sub(r",\s*단답형\s*\d+", "", parts[1]), file=parts[2], fig=(parts[3] if len(parts) > 3 else ""), body=rest))
     return out
 
 def exam_html(qmd, pdir, fig_path):
@@ -33,8 +33,13 @@ def exam_html(qmd, pdir, fig_path):
         ps = []
         for i, p in enumerate(passage):
             t = M.mark(M.esc(p))
-            if i == 1 and s["fig"] and fig_b64:
+            if s["fig"] == "fig" and i == 1 and fig_b64:
                 t = f'<img class="fig" src="data:image/png;base64,{fig_b64}">' + t
+            elif s["fig"].startswith("fig="):
+                fp, at = s["fig"][4:].rsplit("@", 1)
+                if i == int(at):
+                    b = base64.b64encode(open(fp, "rb").read()).decode()
+                    t = f'<img class="fig" src="data:image/png;base64,{b}">' + t
             cls = "gap" if p.startswith(("(나)", "(다)")) else ("fn" if p.startswith("* ") else "")
             ps.append(f'<p class="{cls}">{t}</p>')
         parts.append(f'<div class="set">{M.esc(s["rng"])} 다음 글을 읽고 물음에 답하시오.</div>')

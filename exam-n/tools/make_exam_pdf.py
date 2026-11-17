@@ -57,7 +57,8 @@ def esc(s):
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
 
 def mark(s):  # ⓐ~ⓔ, ㉠~㉤ 표시어 굵게 밑줄
-    return re.sub(r"([ⓐ-ⓔ㉠-㉤])([^\s,.)]+)", r"<b><u>\1\2</u></b>", s)
+    s = re.sub(r"([ⓐ-ⓔ㉠-㉤])\[([^\]]+)\]", r"<b>\1</b><u>\2</u>", s)  # ㉠[여러 낱말 구절]
+    return re.sub(r"([ⓐ-ⓔ㉠-㉤])(?!<)([^\s,.)\[<]+)", r"<b><u>\1\2</u></b>", s)
 
 def digits_box(txt):
     return "".join(f'<span class="dg">{c}</span>' for c in txt)

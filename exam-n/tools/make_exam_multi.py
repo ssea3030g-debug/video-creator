@@ -15,6 +15,8 @@ def split_sets(text):
         out.append(dict(n=parts[0], rng=re.sub(r",\s*단답형\s*\d+", "", parts[1]), file=parts[2], fig=(parts[3] if len(parts) > 3 else ""), body=rest))
     return out
 
+M.CSS += '.figw{display:block;width:92%;margin:4px auto 6px}'
+
 def exam_html(qmd, pdir, fig_path):
     sets = split_sets(open(qmd, encoding="utf-8").read())
     fig_b64 = base64.b64encode(open(fig_path, "rb").read()).decode() if fig_path else None
@@ -39,7 +41,7 @@ def exam_html(qmd, pdir, fig_path):
                 fp, at = s["fig"][4:].rsplit("@", 1)
                 if i == int(at):
                     b = base64.b64encode(open(fp, "rb").read()).decode()
-                    t = f'<img class="fig" src="data:image/png;base64,{b}">' + t
+                    t = f'<img class="figw" src="data:image/png;base64,{b}">' + t
             cls = "gap" if p.startswith(("(나)", "(다)")) else ("fn" if p.startswith("* ") else "")
             ps.append(f'<p class="{cls}">{t}</p>')
         parts.append(f'<div class="set">{M.esc(s["rng"])} 다음 글을 읽고 물음에 답하시오.</div>')

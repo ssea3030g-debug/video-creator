@@ -15,7 +15,7 @@ def split_sets(text):
         out.append(dict(n=parts[0], rng=re.sub(r",\s*단답형\s*\d+", "", parts[1]), file=parts[2], fig=(parts[3] if len(parts) > 3 else ""), body=rest))
     return out
 
-M.CSS += '.figw{display:block;width:92%;margin:4px auto 6px}'
+M.CSS += '.figw{display:block;width:60%;margin:4px auto 6px}'
 
 def exam_html(qmd, pdir, fig_path):
     sets = split_sets(open(qmd, encoding="utf-8").read())

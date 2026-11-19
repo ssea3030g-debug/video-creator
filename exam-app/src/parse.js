@@ -54,13 +54,18 @@ function parseQuestions(examPages, warnings) {
     const body = pg.items.filter((i) => i.y > 60 && i.y < pg.h - 55); // 제목·바닥글 제외
     for (const col of [0, 1]) {
       const items = body.filter((i) => (i.x < mid ? 0 : 1) === col);
+      const colRight = col === 0 ? mid - 6 : pg.w - 24;
+      let open = null; // 줄바꿈된 선지 문장까지 터치 영역을 넓히기 위한 현재 선지
       for (const line of groupLines(items)) {
+        let header = false;
+        let started = null;
         for (const it of line.items) {
           const m = /^\s*(\d{1,2})\.(?:\s|\(|$)/.exec(it.s);
           const expected = questions.length + 1;
           if (m && Number(m[1]) === expected) {
             cur = { n: expected, p: pg.p, choices: [] };
             questions.push(cur);
+            header = true;
             continue;
           }
           if (!cur) continue;
@@ -68,21 +73,36 @@ function parseQuestions(examPages, warnings) {
             const ci = CIRC.indexOf(it.s[k]);
             if (ci >= 0 && ci + 1 === cur.choices.length + 1) {
               const cw = it.w / it.s.length;
-              cur.choices.push({
+              started = {
                 c: ci + 1,
                 p: pg.p,
                 x: it.x + cw * k,
                 y: it.y - it.h,
                 w: cw,
                 h: it.h * 1.2,
-              });
+              };
+              cur.choices.push(started);
             }
           }
+        }
+        const first = line.items.find((i) => i.s.trim());
+        if (started) {
+          open = started;
+          open.r = [open.x - 5, open.y - 3, colRight, line.y + 3];
+          open._y = line.y;
+        } else if (header) {
+          open = null;
+        } else if (open && first && first.x > open.x + 3 && line.y - open._y < 22) {
+          open.r[3] = line.y + 3;
+          open._y = line.y;
+        } else {
+          open = null;
         }
       }
     }
   }
   for (const q of questions) {
+    for (const c of q.choices) delete c._y;
     if (q.choices.length !== 5) warnings.push(`${q.n}번 선지 ${q.choices.length}개`);
   }
   return questions;
@@ -200,6 +220,8 @@ function parseKey(keyPages, warnings) {
   return { key, score, shortAns, shortPts };
 }
 
+export const PARSER_V = 2;
+
 export async function parsePdf(doc) {
   const pages = await readPages(doc);
   const warnings = [];
@@ -240,6 +262,7 @@ export async function parsePdf(doc) {
   }
 
   return {
+    v: PARSER_V,
     numPages: pages.length,
     examPages: examPages.length,
     hasKey,

@@ -1,9 +1,9 @@
 [
-  { "file": "papers/paper-6.pdf", "name": "독서 모의고사 v4" },
-  { "file": "papers/paper-1.pdf", "name": "독서 모의고사 v6" },
-  { "file": "papers/paper-2.pdf", "name": "독서 모의고사 v5" },
-  { "file": "papers/paper-3.pdf", "name": "독서 모의고사 v3 (v2의 쉬운 버전)" },
   { "file": "papers/paper-4.pdf", "name": "독서 모의고사 v2" },
+  { "file": "papers/paper-3.pdf", "name": "독서 모의고사 v3" },
+  { "file": "papers/paper-6.pdf", "name": "독서 모의고사 v4" },
+  { "file": "papers/paper-2.pdf", "name": "독서 모의고사 v5" },
+  { "file": "papers/paper-1.pdf", "name": "독서 모의고사 v6" },
   { "file": "papers/paper-5-1.pdf", "name": "N제 2차 · 인문", "noTimer": true },
   { "file": "papers/paper-5-2.pdf", "name": "N제 2차 · 사회(법)", "noTimer": true },
   { "file": "papers/paper-5-3.pdf", "name": "N제 2차 · 사회(경제·정치)", "noTimer": true },

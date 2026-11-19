@@ -131,7 +131,7 @@ export async function openExam(root, id, goBack) {
     layer.style.height = h + 'px';
     el.append(layer);
     stack.append(el);
-    pages.push({ i, w, h, el, layer, pdf: null, ink: null, win: null, rs: 0, visible: false, token: 0, proxy: null, choices: [], mk: [], inputs: [] });
+    pages.push({ i, w, h, el, layer, pdf: null, ink: null, win: null, rs: 0, visible: false, token: 0, proxy: null, choices: [], inputs: [] });
     if (!st.strokes[i]) st.strokes[i] = [];
   }
   for (const q of parsed.questions) {
@@ -194,45 +194,95 @@ export async function openExam(root, id, goBack) {
     }
   }
 
-  function renderMarks() {
-    for (const pg of pages) {
-      for (const el of pg.mk) el.remove();
-      pg.mk = [];
+  // 렌더링된 PDF 픽셀에서 번호 동그라미의 실제 경계를 읽어 정확히 맞춘다 (결과는 pt 단위로 캐시)
+  const circles = new Map();
+  function circleOf(pg, n, c) {
+    const key = `${n}:${c.c}`;
+    const old = circles.get(key);
+    if (old && (old.exact || !pg.pdf || pg.rs <= old.rs * 1.3)) return old;
+    const guess = { cx: c.x + c.w / 2, cy: c.y + c.h / 2 - 0.7, d: c.w * 0.98, rs: 0, exact: false };
+    if (!pg.pdf || !pg.win || pg.rs < 2) return old || guess;
+    const [wx0, wy0] = pg.win;
+    const rs = pg.rs;
+    const px = (x) => Math.round((x - wx0) * rs);
+    const py = (y) => Math.round((y - wy0) * rs);
+    const x0 = px(c.x - 0.8), x1 = px(c.x + c.w + 0.4), y0 = py(c.y - 1), y1 = py(c.y + c.h);
+    const cw = pg.pdf.width, ch = pg.pdf.height;
+    if (x0 < 0 || y0 < 0 || x1 > cw || y1 > ch || x1 <= x0 || y1 <= y0) return old || guess;
+    let img;
+    try {
+      img = pg.pdf.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0);
+    } catch {
+      return old || guess;
     }
+    const w = img.width, h = img.height, a = img.data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if ((a[i] + a[i + 1] + a[i + 2]) / 3 < 170) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return old || guess;
+    const bw = (maxX - minX + 1) / rs, bh = (maxY - minY + 1) / rs;
+    const d = Math.max(bw, bh);
+    if (d < c.w * 0.6 || d > c.w * 1.35) return old || guess; // 번호 동그라미가 아닌 것을 잡았으면 버림
+    const m = {
+      cx: wx0 + (x0 + (minX + maxX + 1) / 2) / rs,
+      cy: wy0 + (y0 + (minY + maxY + 1) / 2) / rs,
+      d: d + 0.2, // 바깥 테두리까지 덮음
+      rs,
+      exact: rs >= 6,
+    };
+    circles.set(key, m);
+    return m;
+  }
+
+  // 마킹 표시는 SVG로 그린다: 작은 DOM 박스는 확대 전에 정수 픽셀로 반올림돼 원이 찌그러지기 때문
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  for (const pg of pages) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'marks');
+    svg.setAttribute('width', pg.w);
+    svg.setAttribute('height', pg.h);
+    svg.setAttribute('viewBox', `0 0 ${pg.w} ${pg.h}`);
+    pg.layer.prepend(svg);
+    pg.svg = svg;
+  }
+
+  function renderMarks() {
     const fin = st.status === 'finished';
+    const parts = pages.map(() => ({ tint: [], dot: [] }));
     for (const q of parsed.questions) {
       const mine = st.marks[q.n];
       for (const c of q.choices) {
         const isMine = mine === c.c;
         const isAns = fin && q.answer === c.c;
         if (!isMine && !isAns) continue;
-        const pg = pages[c.p - 1];
-        const state = fin ? (isMine ? (q.answer === c.c ? ' ok' : ' bad') : ' key') : '';
-        if (c.r && isMine) {
-          const t = document.createElement('div');
-          t.className = 'mkr' + state;
-          t.style.cssText = `left:${c.r[0]}px;top:${c.r[1]}px;width:${c.r[2] - c.r[0]}px;height:${c.r[3] - c.r[1]}px`;
-          pg.layer.prepend(t);
-          pg.mk.push(t);
-        }
-        const d = document.createElement('div');
-        d.className = 'mk' + (isMine ? ' mine' : '') + state;
+        const out = parts[c.p - 1];
+        if (!out) continue;
+        const good = fin && q.answer === c.c;
+        const color = fin ? (good ? '#059669' : '#dc2626') : '#1f2937';
         if (isMine) {
-          // OMR 카드처럼 번호 동그라미를 꽉 채워 칠함
-          const dia = c.w + 1;
-          d.style.left = c.x + c.w / 2 - dia / 2 + 'px';
-          d.style.top = c.y + c.h / 2 - 0.7 - dia / 2 + 'px';
-          d.style.width = d.style.height = dia + 'px';
+          if (c.r) {
+            const tint = fin ? (good ? 'rgba(5,150,105,.13)' : 'rgba(220,38,38,.12)') : 'rgba(37,99,235,.09)';
+            out.tint.push(`<rect x="${c.r[0]}" y="${c.r[1]}" width="${c.r[2] - c.r[0]}" height="${c.r[3] - c.r[1]}" rx="3" fill="${tint}"/>`);
+          }
+          // OMR 카드처럼 인쇄된 번호 동그라미와 같은 크기·위치로 꽉 채워 칠함
+          const m = circleOf(pages[c.p - 1], q.n, c);
+          out.dot.push(`<circle cx="${m.cx}" cy="${m.cy}" r="${m.d / 2}" fill="${color}"/>`);
         } else {
-          d.style.left = c.x - 3.2 + 'px';
-          d.style.top = c.y - 2.4 + 'px';
-          d.style.width = c.w + 6.4 + 'px';
-          d.style.height = c.h + 3.4 + 'px';
+          // 정답이었는데 고르지 않은 선지: 초록 점선 원
+          out.dot.push(`<circle cx="${c.x + c.w / 2}" cy="${c.y + c.h / 2 - 0.7}" r="${c.w / 2 + 0.9}" fill="rgba(5,150,105,.12)" stroke="#059669" stroke-width=".6" stroke-dasharray="1.5 1.1"/>`);
         }
-        pg.layer.append(d);
-        pg.mk.push(d);
       }
     }
+    pages.forEach((pg, i) => (pg.svg.innerHTML = parts[i].tint.join('') + parts[i].dot.join('')));
     // 단답형: 시험 중에만 입력, 끝나면 채점 색과 정답 표시
     for (const sa of parsed.shorts) {
       for (const f of sa.fields) {

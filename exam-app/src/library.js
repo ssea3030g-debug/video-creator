@@ -19,6 +19,9 @@ export async function addPaper(file, opts = {}) {
   return { id, dup: false, parsed };
 }
 
+// 배포에서 빠진 예전 기본 시험지(통짜 N제 등): 이미 기기에 있으면 지운다
+const RETIRED = ['papers/paper-5.pdf'];
+
 // 배포된 기본 시험지(public/papers/index.json)를 기기에 한 번만 가져온다. 지운 뒤에는 다시 가져오지 않는다.
 export async function seedBuiltin(onProgress) {
   let list = [];
@@ -26,6 +29,11 @@ export async function seedBuiltin(onProgress) {
     list = await (await fetch('papers/index.json', { cache: 'no-cache' })).json();
   } catch {
     return;
+  }
+  for (const rec of await db.all('papers')) {
+    if (RETIRED.includes(rec.src) || /^2026 독서와 작문 고난도 N제 \(156문항\)/.test(rec.name)) {
+      await Promise.all([db.del('papers', rec.id), db.del('files', rec.id), db.del('state', rec.id)]);
+    }
   }
   for (let i = 0; i < list.length; i++) {
     const item = list[i];

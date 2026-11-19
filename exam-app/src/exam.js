@@ -7,7 +7,7 @@ import { grade } from './grade.js';
 export const DEFAULT_MIN = 45;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
-const MAX_PX = 6e6; // 캔버스 한 장 최대 픽셀 (iPad 메모리 보호). 확대 시에는 보이는 부분만 고해상도로 그림
+const MAX_PX = 5e6; // 캔버스 한 장 최대 픽셀 (iPad 메모리 보호). 확대 시에는 보이는 부분만 고해상도로 그림
 const CIRC = '①②③④⑤';
 
 export function newState() {
@@ -253,7 +253,7 @@ export async function openExam(root, id, goBack) {
   function plan(pg) {
     let rs = s * dpr;
     if (pg.w * pg.h * rs * rs <= MAX_PX) return { win: [0, 0, pg.w, pg.h], rs };
-    const win = visRect(pg, 0.5);
+    const win = visRect(pg, 0.3);
     const area = (win[2] - win[0]) * (win[3] - win[1]);
     if (area * rs * rs > MAX_PX) rs = Math.sqrt(MAX_PX / area);
     return { win, rs };
@@ -371,7 +371,7 @@ export async function openExam(root, id, goBack) {
         pg.visible ? renderPage(pg) : release(pg);
       }
     },
-    { root: scroller, rootMargin: '40% 0px' }
+    { root: scroller, rootMargin: '15% 0px' }
   );
 
   function applyScale(ns) {
@@ -471,6 +471,7 @@ export async function openExam(root, id, goBack) {
   const redrawInk = (pg) => pg.ink && drawInk(pg, pg.ink);
 
   let cur = null; // 진행 중인 펜/마우스 작업
+  const stats = { last: null };
 
   function attachLive(pg) {
     if (live.parentNode !== pg.el) pg.el.append(live);
@@ -558,6 +559,9 @@ export async function openExam(root, id, goBack) {
     if (!c.stroke.pts.length || (cancelled && c.stroke.pts.length < 6)) return;
     // 번호/선지를 짧게 톡 친 경우: 필기가 아니라 마킹
     if (c.len < 6 && performance.now() - c.t0 < 350 && c.downChoice && tool === 'pen') return setMark(c.downChoice.n, c.downChoice.c);
+    const n = c.stroke.pts.length / 3;
+    const ms = Math.round(performance.now() - c.t0);
+    stats.last = { n, ms, dt: n > 1 ? +(ms / (n - 1)).toFixed(1) : 0 };
     st.strokes[pg.i].push(c.stroke);
     pushUndo({ t: 'add', i: pg.i, stroke: c.stroke });
     if (pg.ink && pg.win) {
@@ -636,10 +640,14 @@ export async function openExam(root, id, goBack) {
   const touches = new Map(); // 눌려 있는 손가락
   let g = null; // 터치 제스처
   let inertia = 0;
-  const penIds = new Set(); // 화면에 닿아 있는 펜
+  const penIds = new Map(); // 화면에 닿아 있는 펜 id → 마지막 이벤트 시각
   let penSeenAt = 0; // 마지막 펜 이벤트(호버 포함)
   // 펜이 닿았거나 막 떼였거나 근처에 떠 있으면 손바닥으로 보고 터치를 무시
-  const penNear = () => penIds.size > 0 || performance.now() - penSeenAt < 450;
+  const penNear = () => {
+    const now = performance.now();
+    for (const [k, t] of penIds) if (now - t > 2000) penIds.delete(k); // 뗀 신호를 놓쳐도 2초 뒤 풀림
+    return penIds.size > 0 || now - penSeenAt < 450;
+  };
 
   function stopInertia() { cancelAnimationFrame(inertia); }
   function startInertia(vx, vy) {
@@ -679,7 +687,7 @@ export async function openExam(root, id, goBack) {
     // 펜 / 마우스
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.pointerType === 'pen') {
-      penIds.add(e.pointerId);
+      penIds.set(e.pointerId, performance.now());
       penSeenAt = performance.now();
       dropTouches(); // 먼저 닿은 손바닥이 만든 이동/확대를 끊음
     }
@@ -697,7 +705,10 @@ export async function openExam(root, id, goBack) {
   });
 
   scroller.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'pen') penSeenAt = performance.now();
+    if (e.pointerType === 'pen') {
+      penSeenAt = performance.now();
+      if (penIds.has(e.pointerId)) penIds.set(e.pointerId, penSeenAt);
+    }
     if (e.pointerType !== 'touch') {
       if (tool === 'eraser' && canInk()) {
         ring.hidden = false;
@@ -767,6 +778,14 @@ export async function openExam(root, id, goBack) {
       } else endErase();
     }
   };
+  const onTouchEnd = (e) => {
+    if (e.touches.length === 0) setTimeout(() => { touches.clear(); if (g && g.mode !== 'tap') g = null; }, 60);
+  };
+  addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+  addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
+  // iOS Safari는 핀치를 페이지 확대로 처리하므로, 헤더 등 화면 어디서든 제스처 확대를 막음
+  const noGesture = (e) => e.preventDefault();
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, noGesture, { passive: false });
   addEventListener('pointerup', endPointer, true);
   addEventListener('pointercancel', endPointer, true);
   scroller.addEventListener('lostpointercapture', (e) => {
@@ -899,7 +918,11 @@ export async function openExam(root, id, goBack) {
   function showHelp() {
     sheet.dataset.kind = 'help';
     sheet.hidden = false;
-    sheet.innerHTML = `<div class="panel"><div class="ph"><b>사용법</b><button data-a="closesheet">닫기</button></div>${HELP}</div>`;
+    const px = pages.reduce((a, pg) => a + (pg.pdf ? pg.pdf.width * pg.pdf.height * 2 : 0), 0) + live.width * live.height;
+    const ls = stats.last;
+    const diag = `기기 배율 ${dpr} · 확대 ${Math.round(z * 100)}% · 캔버스 ${(px / 1e6).toFixed(1)}백만 픽셀(약 ${Math.round((px * 4) / 1e6)}MB)` +
+      (ls ? ` · 마지막 획: 점 ${ls.n}개, ${ls.ms}ms, 점 간격 평균 ${ls.dt}ms` : '') + ` · 눌린 터치 ${touches.size}`;
+    sheet.innerHTML = `<div class="panel"><div class="ph"><b>사용법</b><button data-a="closesheet">닫기</button></div>${HELP}<p class="muted small">진단: ${diag}</p></div>`;
   }
 
   function showResult() {
@@ -938,6 +961,9 @@ export async function openExam(root, id, goBack) {
     io.disconnect();
     removeEventListener('resize', onResize);
     removeEventListener('pagehide', flush);
+    removeEventListener('touchend', onTouchEnd, true);
+    removeEventListener('touchcancel', onTouchEnd, true);
+    for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.removeEventListener(t, noGesture);
     removeEventListener('pointerup', endPointer, true);
     removeEventListener('pointercancel', endPointer, true);
     document.removeEventListener('visibilitychange', onHide);

@@ -30,6 +30,12 @@ export async function seedBuiltin(onProgress) {
   } catch {
     return;
   }
+  // 이미 가져온 시험지의 이름이 목록과 다르면 새 이름으로 바꾼다 (예: v3 설명 추가)
+  const byFile = new Map(list.map((it) => [it.file, it]));
+  for (const rec of await db.all('papers')) {
+    const it = byFile.get(rec.src);
+    if (it && it.name !== rec.name) await db.put('papers', rec.id, { ...rec, name: it.name });
+  }
   for (const rec of await db.all('papers')) {
     if (RETIRED.includes(rec.src) || /^2026 독서와 작문 고난도 N제 \(156문항\)/.test(rec.name)) {
       await Promise.all([db.del('papers', rec.id), db.del('files', rec.id), db.del('state', rec.id)]);

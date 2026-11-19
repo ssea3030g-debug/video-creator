@@ -24,6 +24,9 @@
   ```
 - 이미 있으면(`ffmpeg -version`이 7 이상, `~/lemo-opuscar` 존재) 다시 설치하지 않는다.
 
+## 시험지 풀이 앱
+- `exam-app/`: 시험지 PDF를 올려 45분 타이머로 푸는 PWA (펜슬 필기·마킹·자동 채점). 설명·실행법은 `exam-app/README.md`. 파서 규칙은 `exam-app/src/parse.js`.
+
 ## 영상 만들기
 - 지침 순서: `$HOME/lemo-opuscar/AGENTS.md` → `styles/<slug>/STYLE.md` → `DIRECTOR.md` / `TECHNIQUE.md`. 스타일 목록: `styles/README.md`.
 - 프로젝트 폴더는 **이 저장소의 `films/<이름>/`**. 라이브러리 도구는 `cd $HOME/lemo-opuscar && node core/render/… <프로젝트 절대경로>`로 실행.

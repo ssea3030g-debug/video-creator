@@ -172,10 +172,35 @@ function parseKey(keyPages, warnings) {
   const shortPts = {}; // id -> 빈칸당 점수
   let mode = null;
   let pendingNums = null;
+  let catNums = '';
+  const catStarts = [];
   for (const pg of keyPages) {
     for (const line of groupLines(pg.items)) {
       const text = line.text.replace(/\s+/g, '');
-      if (text.startsWith('정답표')) { mode = 'ans'; pendingNums = null; continue; }
+      if (text.startsWith('정답표') || text === '정답') { mode = 'ans'; pendingNums = null; continue; }
+      // 공백 없이 이어진 형식(번호/정답/배점 한 줄씩)
+      if (/^번호\d/.test(text)) { mode = 'ans-cat'; catNums = text.slice(2); continue; }
+      if (mode === 'ans-cat' && /^정답[①-⑤]/.test(text)) {
+        const ans = [...text.slice(2)].filter((ch) => CIRC.includes(ch));
+        const n = ans.length;
+        // 번호열(1234…)을 연속된 수열로 맞춰 시작 번호를 찾는다
+        let start = null;
+        for (let st0 = 1; st0 <= 300 && start == null; st0++) {
+          let acc = '';
+          for (let k = 0; k < n; k++) acc += String(st0 + k);
+          if (acc === catNums) start = st0;
+        }
+        if (start == null) { warnings.push('정답표 번호를 읽지 못함'); continue; }
+        ans.forEach((ch, k) => (key[start + k] = CIRC.indexOf(ch) + 1));
+        catStarts.push(start);
+        continue;
+      }
+      if (mode === 'ans-cat' && /^배점/.test(text)) {
+        const pts = text.slice(2).match(/\d+\.\d/g) || [];
+        const start = catStarts[catStarts.length - 1];
+        pts.forEach((v, k) => (score[start + k] = Number(v)));
+        continue;
+      }
       if (text.startsWith('배점표')) { mode = 'score'; pendingNums = null; continue; }
       if (/^해설/.test(text) && text.length < 6) { mode = null; continue; }
       if (!mode) continue;
@@ -228,7 +253,7 @@ export const PARSER_V = 2;
 export async function parsePdf(doc) {
   const pages = await readPages(doc);
   const warnings = [];
-  let keyStart = pages.findIndex((pg) => /정답표/.test(pg.items.map((i) => i.s).join('')));
+  let keyStart = pages.findIndex((pg) => /정답표|정답·해설|교사용/.test(pg.items.map((i) => i.s).join('')));
   const hasKey = keyStart >= 0;
   if (!hasKey) keyStart = pages.length;
   const examPages = pages.slice(0, keyStart);

@@ -217,10 +217,18 @@ export async function openExam(root, id, goBack) {
         }
         const d = document.createElement('div');
         d.className = 'mk' + (isMine ? ' mine' : '') + state;
-        d.style.left = c.x - 3.2 + 'px';
-        d.style.top = c.y - 2.4 + 'px';
-        d.style.width = c.w + 6.4 + 'px';
-        d.style.height = c.h + 3.4 + 'px';
+        if (isMine) {
+          // OMR 카드처럼 번호 동그라미를 꽉 채워 칠함
+          const dia = c.w + 1;
+          d.style.left = c.x + c.w / 2 - dia / 2 + 'px';
+          d.style.top = c.y + c.h / 2 - 0.7 - dia / 2 + 'px';
+          d.style.width = d.style.height = dia + 'px';
+        } else {
+          d.style.left = c.x - 3.2 + 'px';
+          d.style.top = c.y - 2.4 + 'px';
+          d.style.width = c.w + 6.4 + 'px';
+          d.style.height = c.h + 3.4 + 'px';
+        }
         pg.layer.append(d);
         pg.mk.push(d);
       }

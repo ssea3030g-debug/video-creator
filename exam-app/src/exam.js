@@ -1,11 +1,14 @@
 import * as db from './db.js';
 import { openPdf } from './pdf.js';
+import { parsePdf, PARSER_V } from './parse.js';
 import { PEN_SIZE, strokePath, livePath, hitStroke } from './ink.js';
 import { grade } from './grade.js';
 
 export const DEFAULT_MIN = 45;
-const MAX_ZOOM = 3;
-const MAX_PX = 9e6; // 캔버스 한 장 최대 픽셀 (iPad 메모리 보호)
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
+const MAX_PX = 5e6; // 캔버스 한 장 최대 픽셀 (iPad 메모리 보호). 확대 시에는 보이는 부분만 고해상도로 그림
+const CIRC = '①②③④⑤';
 
 export function newState() {
   return {
@@ -27,13 +30,26 @@ export const fmt = (ms) => {
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+const HELP = `<ul class="help">
+  <li><b>마킹</b>: 선지 <b>번호나 문장을 한 번 탭</b>하면 파란 동그라미로 표시됩니다. 같은 선지를 다시 탭하면 해제. 위쪽 <b>답안지</b> 버튼에서 번호를 눌러도 됩니다.</li>
+  <li><b>필기</b>: 애플 펜슬로 씁니다. 펜슬로 선지를 <b>톡</b> 치면 마킹, 길게 그으면 필기입니다.</li>
+  <li><b>이동</b>: 손가락 한 개로 밀기 · <b>확대/축소</b>: 손가락 두 개로 벌리기/모으기 (－ ＋ 버튼, 100% 누르면 처음 크기)</li>
+  <li><b>지우개</b>: 지우개 버튼을 누르고 지울 획 위를 문지르기 (획 단위로 지워집니다)</li>
+  <li><b>단답형</b>: 파란 입력칸을 눌러 키보드로 입력, Enter = 다음 칸</li>
+</ul>`;
+
 export async function openExam(root, id, goBack) {
   const rec = await db.get('papers', id);
   const buf = await db.get('files', id);
   if (!rec || !buf) return goBack();
+  const doc = await openPdf(buf);
+  if (rec.parsed.v !== PARSER_V) {
+    // 분석 규칙이 바뀐 경우: 저장된 PDF로 조용히 다시 분석
+    rec.parsed = await parsePdf(doc);
+    await db.put('papers', id, rec);
+  }
   const parsed = rec.parsed;
   const st = (await db.get('state', id)) || newState();
-  const doc = await openPdf(buf);
 
   root.innerHTML = `
   <div class="exam">
@@ -47,9 +63,10 @@ export async function openExam(root, id, goBack) {
         <button data-a="undo" aria-label="되돌리기">↶</button>
         <button data-a="redo" aria-label="다시">↷</button>
         <button data-a="zoomout" aria-label="축소">－</button>
-        <span class="zl" id="zl">100%</span>
+        <button data-a="zoomreset" class="zl" id="zl">100%</button>
         <button data-a="zoomin" aria-label="확대">＋</button>
-        <button data-a="nav">문항</button>
+        <button data-a="nav">답안지</button>
+        <button data-a="help" aria-label="사용법">?</button>
         <button data-a="pause">일시정지</button>
         <button data-a="submit" class="primary">제출</button>
       </div>
@@ -57,6 +74,7 @@ export async function openExam(root, id, goBack) {
     <div class="scroller" id="scroller"><div class="stack" id="stack"></div></div>
     <div class="cover" id="cover" hidden></div>
     <div class="sheet" id="sheet" hidden></div>
+    <div class="toast" id="toast" hidden></div>
     <div class="ring" id="ring" hidden></div>
   </div>`;
   const $ = (q) => root.querySelector(q);
@@ -67,16 +85,28 @@ export async function openExam(root, id, goBack) {
   const sheet = $('#sheet');
   const ring = $('#ring');
   const zl = $('#zl');
+  const toastEl = $('#toast');
 
-  /* ---------- 상태 저장 ---------- */
+  let toastT = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toastT);
+    toastT = setTimeout(() => (toastEl.hidden = true), 1300);
+  }
+
+  /* ---------- 상태 저장 (필기 중에는 미루고, 손을 뗀 뒤 저장) ---------- */
   let saveT = 0;
-  const save = () => {
-    clearTimeout(saveT);
-    saveT = setTimeout(flush, 700);
-  };
   const flush = () => {
     clearTimeout(saveT);
-    return db.put('state', id, JSON.parse(JSON.stringify(st)));
+    return db.put('state', id, st);
+  };
+  const save = () => {
+    clearTimeout(saveT);
+    saveT = setTimeout(function tryNow() {
+      if (cur || touches.size) saveT = setTimeout(tryNow, 800);
+      else flush();
+    }, 1500);
   };
   const onHide = () => document.visibilityState === 'hidden' && flush();
   document.addEventListener('visibilitychange', onHide);
@@ -84,8 +114,7 @@ export async function openExam(root, id, goBack) {
 
   /* ---------- 페이지 구성 ---------- */
   const pages = [];
-  const marksByQ = new Map(); // n -> question
-  parsed.questions.forEach((q) => marksByQ.set(q.n, q));
+  const qByN = new Map(parsed.questions.map((q) => [q.n, q]));
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const maxW = Math.max(...parsed.pageSizes.map((p) => p[0]));
   let z = 1;
@@ -102,18 +131,33 @@ export async function openExam(root, id, goBack) {
     layer.style.height = h + 'px';
     el.append(layer);
     stack.append(el);
-    const pg = { i, w, h, el, layer, pdf: null, ink: null, rs: 0, visible: false, token: 0, proxy: null, choices: [], mk: new Map(), inputs: [] };
-    pages.push(pg);
+    pages.push({ i, w, h, el, layer, pdf: null, ink: null, win: null, rs: 0, visible: false, token: 0, proxy: null, choices: [], inputs: [] });
     if (!st.strokes[i]) st.strokes[i] = [];
   }
   for (const q of parsed.questions) {
     for (const c of q.choices) {
-      const pg = pages[c.p - 1];
-      if (pg) pg.choices.push({ n: q.n, c: c.c, x: c.x, y: c.y, w: c.w, h: c.h });
+      pages[c.p - 1]?.choices.push({ n: q.n, c: c.c, x: c.x, y: c.y, w: c.w, h: c.h, r: c.r });
     }
   }
 
-  // 마킹 표시 / 단답형 입력칸 (레이어는 pt 단위를 scale로 확대)
+  // 선지 터치 버튼: 번호와 문장 전체. 브라우저가 직접 탭(click)을 처리하므로 손가락·펜슬·마우스 모두 동작
+  for (const q of parsed.questions) {
+    for (const c of q.choices) {
+      const pg = pages[c.p - 1];
+      if (!pg) continue;
+      const r = c.r || [c.x - 5, c.y - 3, c.x + 200, c.y + c.h + 3];
+      const b = document.createElement('button');
+      b.className = 'hit';
+      b.type = 'button';
+      b.dataset.n = q.n;
+      b.dataset.c = c.c;
+      b.setAttribute('aria-label', `${q.n}번 ${CIRC[c.c - 1]}`);
+      b.style.cssText = `left:${r[0]}px;top:${r[1]}px;width:${r[2] - r[0]}px;height:${r[3] - r[1]}px`;
+      pg.layer.append(b);
+    }
+  }
+
+  // 단답형 입력칸
   for (const sa of parsed.shorts) {
     const pg = pages[sa.p - 1];
     for (const f of sa.fields) {
@@ -135,7 +179,7 @@ export async function openExam(root, id, goBack) {
       inp.addEventListener('input', () => {
         st.texts[inp.dataset.key] = inp.value;
         save();
-        refreshNav();
+        if (sheetKind() === 'nav') showNav(true);
       });
       inp.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -150,29 +194,95 @@ export async function openExam(root, id, goBack) {
     }
   }
 
-  function renderMarks() {
-    for (const pg of pages) {
-      for (const el of pg.mk.values()) el.remove();
-      pg.mk.clear();
+  // 렌더링된 PDF 픽셀에서 번호 동그라미의 실제 경계를 읽어 정확히 맞춘다 (결과는 pt 단위로 캐시)
+  const circles = new Map();
+  function circleOf(pg, n, c) {
+    const key = `${n}:${c.c}`;
+    const old = circles.get(key);
+    if (old && (old.exact || !pg.pdf || pg.rs <= old.rs * 1.3)) return old;
+    const guess = { cx: c.x + c.w / 2, cy: c.y + c.h / 2 - 0.7, d: c.w * 0.98, rs: 0, exact: false };
+    if (!pg.pdf || !pg.win || pg.rs < 2) return old || guess;
+    const [wx0, wy0] = pg.win;
+    const rs = pg.rs;
+    const px = (x) => Math.round((x - wx0) * rs);
+    const py = (y) => Math.round((y - wy0) * rs);
+    const x0 = px(c.x - 0.8), x1 = px(c.x + c.w + 0.4), y0 = py(c.y - 1), y1 = py(c.y + c.h);
+    const cw = pg.pdf.width, ch = pg.pdf.height;
+    if (x0 < 0 || y0 < 0 || x1 > cw || y1 > ch || x1 <= x0 || y1 <= y0) return old || guess;
+    let img;
+    try {
+      img = pg.pdf.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0);
+    } catch {
+      return old || guess;
     }
+    const w = img.width, h = img.height, a = img.data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if ((a[i] + a[i + 1] + a[i + 2]) / 3 < 170) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return old || guess;
+    const bw = (maxX - minX + 1) / rs, bh = (maxY - minY + 1) / rs;
+    const d = Math.max(bw, bh);
+    if (d < c.w * 0.6 || d > c.w * 1.35) return old || guess; // 번호 동그라미가 아닌 것을 잡았으면 버림
+    const m = {
+      cx: wx0 + (x0 + (minX + maxX + 1) / 2) / rs,
+      cy: wy0 + (y0 + (minY + maxY + 1) / 2) / rs,
+      d: d + 0.2, // 바깥 테두리까지 덮음
+      rs,
+      exact: rs >= 6,
+    };
+    circles.set(key, m);
+    return m;
+  }
+
+  // 마킹 표시는 SVG로 그린다: 작은 DOM 박스는 확대 전에 정수 픽셀로 반올림돼 원이 찌그러지기 때문
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  for (const pg of pages) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'marks');
+    svg.setAttribute('width', pg.w);
+    svg.setAttribute('height', pg.h);
+    svg.setAttribute('viewBox', `0 0 ${pg.w} ${pg.h}`);
+    pg.layer.prepend(svg);
+    pg.svg = svg;
+  }
+
+  function renderMarks() {
     const fin = st.status === 'finished';
+    const parts = pages.map(() => ({ tint: [], dot: [] }));
     for (const q of parsed.questions) {
       const mine = st.marks[q.n];
       for (const c of q.choices) {
         const isMine = mine === c.c;
         const isAns = fin && q.answer === c.c;
         if (!isMine && !isAns) continue;
-        const pg = pages[c.p - 1];
-        const d = document.createElement('div');
-        d.className = 'mk' + (isMine ? ' mine' : '') + (fin ? (isMine ? (q.answer === c.c ? ' ok' : ' bad') : ' key') : '');
-        d.style.left = c.x - 3.2 + 'px';
-        d.style.top = c.y - 2.4 + 'px';
-        d.style.width = c.w + 6.4 + 'px';
-        d.style.height = c.h + 3.4 + 'px';
-        pg.layer.append(d);
-        pg.mk.set(`${q.n}:${c.c}${isMine ? 'm' : 'a'}`, d);
+        const out = parts[c.p - 1];
+        if (!out) continue;
+        const good = fin && q.answer === c.c;
+        const color = fin ? (good ? '#059669' : '#dc2626') : '#1f2937';
+        if (isMine) {
+          if (c.r) {
+            const tint = fin ? (good ? 'rgba(5,150,105,.13)' : 'rgba(220,38,38,.12)') : 'rgba(37,99,235,.09)';
+            out.tint.push(`<rect x="${c.r[0]}" y="${c.r[1]}" width="${c.r[2] - c.r[0]}" height="${c.r[3] - c.r[1]}" rx="3" fill="${tint}"/>`);
+          }
+          // OMR 카드처럼 인쇄된 번호 동그라미와 같은 크기·위치로 꽉 채워 칠함
+          const m = circleOf(pages[c.p - 1], q.n, c);
+          out.dot.push(`<circle cx="${m.cx}" cy="${m.cy}" r="${m.d / 2}" fill="${color}"/>`);
+        } else {
+          // 정답이었는데 고르지 않은 선지: 초록 점선 원
+          out.dot.push(`<circle cx="${c.x + c.w / 2}" cy="${c.y + c.h / 2 - 0.7}" r="${c.w / 2 + 0.9}" fill="rgba(5,150,105,.12)" stroke="#059669" stroke-width=".6" stroke-dasharray="1.5 1.1"/>`);
+        }
       }
     }
+    pages.forEach((pg, i) => (pg.svg.innerHTML = parts[i].tint.join('') + parts[i].dot.join('')));
     // 단답형: 시험 중에만 입력, 끝나면 채점 색과 정답 표시
     for (const sa of parsed.shorts) {
       for (const f of sa.fields) {
@@ -185,35 +295,87 @@ export async function openExam(root, id, goBack) {
     }
   }
 
-  /* ---------- 렌더링 ---------- */
-  const targetRs = (pg) => Math.min(s * dpr, Math.sqrt(MAX_PX / (pg.w * pg.h)));
-
-  function drawInk(pg, canvas, rs) {
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(rs, 0, 0, rs, 0, 0);
-    ctx.fillStyle = '#111';
-    for (const stroke of st.strokes[pg.i]) ctx.fill(strokePath(stroke));
+  /* ---------- 렌더링: 작은 확대는 페이지 전체, 큰 확대는 보이는 부분만 고해상도 ---------- */
+  function visRect(pg, frac) {
+    const r = pg.el.getBoundingClientRect();
+    const v = scroller.getBoundingClientRect();
+    const mx = v.width * frac, my = v.height * frac;
+    return [
+      Math.max(0, (v.left - mx - r.left) / s),
+      Math.max(0, (v.top - my - r.top) / s),
+      Math.min(pg.w, (v.right + mx - r.left) / s),
+      Math.min(pg.h, (v.bottom + my - r.top) / s),
+    ];
   }
 
-  function makeCanvas(cls, pg, rs) {
+  function plan(pg) {
+    let rs = s * dpr;
+    if (pg.w * pg.h * rs * rs <= MAX_PX) return { win: [0, 0, pg.w, pg.h], rs };
+    const win = visRect(pg, 0.3);
+    const area = (win[2] - win[0]) * (win[3] - win[1]);
+    if (area * rs * rs > MAX_PX) rs = Math.sqrt(MAX_PX / area);
+    return { win, rs };
+  }
+
+  function needsRender(pg) {
+    if (!pg.pdf) return true;
+    const want = plan(pg);
+    if (Math.abs(pg.rs - want.rs) / want.rs > 0.03) return true;
+    if (pg.win[0] === 0 && pg.win[1] === 0 && pg.win[2] === pg.w && pg.win[3] === pg.h) return false; // 전체 렌더
+    const need = visRect(pg, 0.05);
+    const e = 1;
+    return need[0] < pg.win[0] - e || need[1] < pg.win[1] - e || need[2] > pg.win[2] + e || need[3] > pg.win[3] + e;
+  }
+
+  function place(pg) {
+    if (!pg.win) return;
+    const [x0, y0, x1, y1] = pg.win;
+    for (const c of [pg.pdf, pg.ink, live.parentNode === pg.el ? live : null]) {
+      if (!c) continue;
+      c.style.left = x0 * s + 'px';
+      c.style.top = y0 * s + 'px';
+      c.style.width = (x1 - x0) * s + 'px';
+      c.style.height = (y1 - y0) * s + 'px';
+    }
+  }
+
+  function drawInk(pg, canvas) {
+    const ctx = canvas.getContext('2d');
+    const [x0, y0, x1, y1] = pg.win;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(pg.rs, 0, 0, pg.rs, -x0 * pg.rs, -y0 * pg.rs);
+    ctx.fillStyle = '#111';
+    for (const stroke of st.strokes[pg.i]) {
+      const b = stroke.bb;
+      if (b && (b[2] < x0 - 3 || b[0] > x1 + 3 || b[3] < y0 - 3 || b[1] > y1 + 3)) continue;
+      ctx.fill(strokePath(stroke));
+    }
+  }
+
+  function makeCanvas(cls, win, rs) {
     const c = document.createElement('canvas');
     c.className = cls;
-    c.width = Math.round(pg.w * rs);
-    c.height = Math.round(pg.h * rs);
+    c.width = Math.max(1, Math.round((win[2] - win[0]) * rs));
+    c.height = Math.max(1, Math.round((win[3] - win[1]) * rs));
     return c;
   }
 
   async function renderPage(pg) {
-    if (!pg.visible) return;
-    const rs = targetRs(pg);
-    if (pg.rs && Math.abs(pg.rs - rs) / rs < 0.03) return;
+    if (!pg.visible || !needsRender(pg)) return;
+    const { win, rs } = plan(pg);
+    if (win[2] - win[0] < 1 || win[3] - win[1] < 1) return;
     const token = ++pg.token;
     pg.proxy ||= await doc.getPage(pg.i + 1);
     if (token !== pg.token || !pg.visible) return;
-    const pdfC = makeCanvas('pdf', pg, rs);
-    const inkC = makeCanvas('ink', pg, rs);
-    const task = pg.proxy.render({ canvasContext: pdfC.getContext('2d'), viewport: pg.proxy.getViewport({ scale: rs }) });
+    const pdfC = makeCanvas('pdf', win, rs);
+    const inkC = makeCanvas('ink', win, rs);
     pg.task?.cancel?.();
+    const task = pg.proxy.render({
+      canvasContext: pdfC.getContext('2d'),
+      viewport: pg.proxy.getViewport({ scale: rs }),
+      transform: [1, 0, 0, 1, -win[0] * rs, -win[1] * rs],
+    });
     pg.task = task;
     try {
       await task.promise;
@@ -221,26 +383,40 @@ export async function openExam(root, id, goBack) {
       return; // 취소됨
     }
     if (token !== pg.token || !pg.visible) return;
-    drawInk(pg, inkC, rs);
+    const prev = { win: pg.win, rs: pg.rs };
+    pg.win = win;
+    pg.rs = rs;
+    drawInk(pg, inkC);
+    // 필기 중인 페이지는 캔버스를 바꾸지 않고 나중에 다시 시도
+    if (cur?.pg === pg) {
+      pg.win = prev.win;
+      pg.rs = prev.rs;
+      inkC.width = pdfC.width = 0;
+      setTimeout(() => renderPage(pg), 400);
+      return;
+    }
     pg.pdf?.remove();
     pg.ink?.remove();
+    for (const c of [pg.pdf, pg.ink]) if (c) c.width = c.height = 0;
     pg.el.prepend(pdfC);
     pdfC.after(inkC);
     pg.pdf = pdfC;
     pg.ink = inkC;
-    pg.rs = rs;
+    place(pg);
   }
 
   function release(pg) {
     pg.token++;
     pg.task?.cancel?.();
+    if (cur?.pg === pg) return;
     for (const c of [pg.pdf, pg.ink]) if (c) { c.width = c.height = 0; c.remove(); }
     pg.pdf = pg.ink = null;
+    pg.win = null;
     pg.rs = 0;
   }
 
   let rt = 0;
-  const scheduleRender = (delay = 120) => {
+  const scheduleRender = (delay = 140) => {
     clearTimeout(rt);
     rt = setTimeout(() => pages.forEach(renderPage), delay);
   };
@@ -253,7 +429,7 @@ export async function openExam(root, id, goBack) {
         pg.visible ? renderPage(pg) : release(pg);
       }
     },
-    { root: scroller, rootMargin: '60% 0px' }
+    { root: scroller, rootMargin: '15% 0px' }
   );
 
   function applyScale(ns) {
@@ -262,13 +438,14 @@ export async function openExam(root, id, goBack) {
       pg.el.style.width = pg.w * s + 'px';
       pg.el.style.height = pg.h * s + 'px';
       pg.layer.style.transform = `scale(${s})`;
+      place(pg);
     }
     zl.textContent = Math.round(z * 100) + '%';
   }
 
   function setZoom(nz, cx, cy) {
-    nz = Math.max(1, Math.min(MAX_ZOOM, nz));
-    if (nz === z) return;
+    nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nz));
+    if (Math.abs(nz - z) < 1e-4) return;
     const r = (fit() * nz) / s;
     const ox = scroller.scrollLeft + cx;
     const oy = scroller.scrollTop + cy;
@@ -280,6 +457,11 @@ export async function openExam(root, id, goBack) {
   }
   const center = () => [scroller.clientWidth / 2, scroller.clientHeight / 2];
 
+  // 필기용 라이브 캔버스(하나를 재사용: 획마다 새로 만들면 iPad에서 끊김)
+  const live = document.createElement('canvas');
+  live.className = 'live';
+  const lctx = live.getContext('2d', { desynchronized: true });
+
   applyScale(fit());
   pages.forEach((pg) => io.observe(pg.el));
   const onResize = () => {
@@ -287,6 +469,7 @@ export async function openExam(root, id, goBack) {
     scheduleRender(200);
   };
   addEventListener('resize', onResize);
+  scroller.addEventListener('scroll', () => scheduleRender(160), { passive: true });
 
   /* ---------- 좌표 / 히트 테스트 ---------- */
   function pageAt(x, y) {
@@ -297,24 +480,43 @@ export async function openExam(root, id, goBack) {
     return null;
   }
 
+  // 번호 글자에 가까우면 그 선지, 아니면 선지 문장 영역 안이면 그 선지
   function choiceAt(x, y) {
     const hit = pageAt(x, y);
     if (!hit) return null;
-    const rad = 16 / s; // 약 16 css px
+    const rad = 18 / s;
     let best = null, bd = rad * rad;
     for (const c of hit.pg.choices) {
       const d = (hit.px - (c.x + c.w / 2)) ** 2 + (hit.py - (c.y + c.h / 2)) ** 2;
       if (d <= bd) { bd = d; best = c; }
     }
+    if (best) return best;
+    let ba = Infinity;
+    for (const c of hit.pg.choices) {
+      const r = c.r;
+      if (!r || hit.px < r[0] || hit.px > r[2] || hit.py < r[1] || hit.py > r[3]) continue;
+      const a = (r[2] - r[0]) * (r[3] - r[1]);
+      if (a < ba) { ba = a; best = c; }
+    }
     return best;
   }
 
-  function toggleMark(c) {
+  let lastMark = { k: '', t: 0 };
+  function setMark(n, c) {
     if (st.status !== 'running') return;
-    if (st.marks[c.n] === c.c) delete st.marks[c.n];
-    else st.marks[c.n] = c.c;
+    const k = `${n}:${c}`;
+    const now = performance.now();
+    if (lastMark.k === k && now - lastMark.t < 450) return; // 같은 탭의 중복 이벤트
+    lastMark = { k, t: now };
+    if (st.marks[n] === c) {
+      delete st.marks[n];
+      toast(`${n}번 마킹 해제`);
+    } else {
+      st.marks[n] = c;
+      toast(`${n}번 → ${CIRC[c - 1]}`);
+    }
     renderMarks();
-    refreshNav();
+    if (sheetKind() === 'nav') showNav(true);
     save();
     navigator.vibrate?.(8);
   }
@@ -324,32 +526,40 @@ export async function openExam(root, id, goBack) {
   const undo = [];
   const redo = [];
   const pushUndo = (a) => { undo.push(a); redo.length = 0; };
-  const redrawInk = (pg) => {
-    if (!pg.ink) return;
-    const ctx = pg.ink.getContext('2d');
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, pg.ink.width, pg.ink.height);
-    drawInk(pg, pg.ink, pg.rs);
-  };
+  const redrawInk = (pg) => pg.ink && drawInk(pg, pg.ink);
 
-  let cur = null; // 진행 중인 포인터 작업
-  let penDown = false;
-  let penUpAt = 0;
+  let cur = null; // 진행 중인 펜/마우스 작업
+  const stats = { last: null };
+
+  function attachLive(pg) {
+    if (live.parentNode !== pg.el) pg.el.append(live);
+    if (live.width !== pg.pdf.width || live.height !== pg.pdf.height) {
+      live.width = pg.pdf.width;
+      live.height = pg.pdf.height;
+    }
+    place(pg);
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(0, 0, live.width, live.height);
+  }
+
+  const hitOf = (el) => {
+    const h = el?.closest?.('.hit');
+    return h ? { n: Number(h.dataset.n), c: Number(h.dataset.c) } : null;
+  };
 
   function startStroke(e, hit) {
     const pg = hit.pg;
-    if (!pg.ink) return;
-    const live = makeCanvas('live', pg, pg.rs);
-    pg.el.append(live);
+    if (!pg.ink || !pg.pdf) return false;
+    attachLive(pg);
     cur = {
-      mode: 'pen', id: e.pointerId, pg, live,
-      ctx: live.getContext('2d'),
+      mode: 'pen', id: e.pointerId, pg,
       stroke: { size: PEN_SIZE, sim: e.pointerType !== 'pen', pts: [] },
       len: 0, t0: performance.now(), x0: e.clientX, y0: e.clientY,
-      downChoice: choiceAt(e.clientX, e.clientY),
-      raf: 0,
+      downChoice: choiceAt(e.clientX, e.clientY) || hitOf(e.target),
+      raf: 0, box: null,
     };
     addPoints(e);
+    return true;
   }
 
   function addPoints(e) {
@@ -363,39 +573,58 @@ export async function openExam(root, id, goBack) {
       const pr = ev.pointerType === 'pen' ? Math.max(0.05, ev.pressure || 0.5) : 0.5;
       const n = p.length;
       if (n >= 3 && Math.abs(p[n - 3] - x) < 0.04 && Math.abs(p[n - 2] - y) < 0.04) continue;
-      if (n >= 3) cur.len += Math.hypot(ev.clientX - (cur.lx ?? cur.x0), ev.clientY - (cur.ly ?? cur.y0));
+      cur.len += Math.hypot(ev.clientX - (cur.lx ?? cur.x0), ev.clientY - (cur.ly ?? cur.y0));
       cur.lx = ev.clientX;
       cur.ly = ev.clientY;
       p.push(Math.round(x * 100) / 100, Math.round(y * 100) / 100, Math.round(pr * 100) / 100);
+      const b = cur.box;
+      if (!b) cur.box = [x, y, x, y];
+      else { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
     }
     if (!cur.raf) cur.raf = requestAnimationFrame(paintLive);
+  }
+
+  // 획이 지나간 영역만 지우고 다시 그려 프레임 비용을 작게 유지
+  function dirtyRect(pg, box) {
+    const pad = PEN_SIZE * 2 + 3;
+    const [x0, y0] = pg.win;
+    return [(box[0] - pad - x0) * pg.rs, (box[1] - pad - y0) * pg.rs, (box[2] - box[0] + pad * 2) * pg.rs, (box[3] - box[1] + pad * 2) * pg.rs];
   }
 
   function paintLive() {
     if (!cur || cur.mode !== 'pen') return;
     cur.raf = 0;
-    const { ctx, live, pg } = cur;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, live.width, live.height);
-    ctx.setTransform(pg.rs, 0, 0, pg.rs, 0, 0);
-    ctx.fillStyle = '#111';
-    ctx.fill(livePath(cur.stroke));
+    const { pg } = cur;
+    const [dx, dy, dw, dh] = dirtyRect(pg, cur.box);
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(dx, dy, dw, dh);
+    lctx.setTransform(pg.rs, 0, 0, pg.rs, -pg.win[0] * pg.rs, -pg.win[1] * pg.rs);
+    lctx.fillStyle = '#111';
+    lctx.fill(livePath(cur.stroke));
   }
 
-  function endStroke(cancel) {
+  function endStroke(cancelled) {
     const c = cur;
     cur = null;
     cancelAnimationFrame(c.raf);
-    c.live.width = c.live.height = 0;
-    c.live.remove();
-    if (cancel || !c.stroke.pts.length) return;
-    // 번호 위를 짧게 톡 친 경우: 필기가 아니라 마킹
-    if (c.len < 6 && performance.now() - c.t0 < 350 && c.downChoice) return toggleMark(c.downChoice);
-    st.strokes[c.pg.i].push(c.stroke);
-    pushUndo({ t: 'add', i: c.pg.i, stroke: c.stroke });
-    if (c.pg.ink) {
-      const ctx = c.pg.ink.getContext('2d');
-      ctx.setTransform(c.pg.rs, 0, 0, c.pg.rs, 0, 0);
+    const { pg } = c;
+    if (c.box && pg.win) {
+      const [dx, dy, dw, dh] = dirtyRect(pg, c.box);
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.clearRect(dx, dy, dw, dh);
+    }
+    live.remove();
+    if (!c.stroke.pts.length || (cancelled && c.stroke.pts.length < 6)) return;
+    // 번호/선지를 짧게 톡 친 경우: 필기가 아니라 마킹
+    if (c.len < 6 && performance.now() - c.t0 < 350 && c.downChoice && tool === 'pen') return setMark(c.downChoice.n, c.downChoice.c);
+    const n = c.stroke.pts.length / 3;
+    const ms = Math.round(performance.now() - c.t0);
+    stats.last = { n, ms, dt: n > 1 ? +(ms / (n - 1)).toFixed(1) : 0 };
+    st.strokes[pg.i].push(c.stroke);
+    pushUndo({ t: 'add', i: pg.i, stroke: c.stroke });
+    if (pg.ink && pg.win) {
+      const ctx = pg.ink.getContext('2d');
+      ctx.setTransform(pg.rs, 0, 0, pg.rs, -pg.win[0] * pg.rs, -pg.win[1] * pg.rs);
       ctx.fillStyle = '#111';
       ctx.fill(strokePath(c.stroke));
     }
@@ -417,7 +646,7 @@ export async function openExam(root, id, goBack) {
     }
     if (removed) {
       cur.dirty.add(hit.pg);
-      if (!cur.raf) cur.raf = requestAnimationFrame(() => { cur && (cur.raf = 0, cur.dirty.forEach(redrawInk), cur.dirty.clear()); });
+      if (!cur.raf) cur.raf = requestAnimationFrame(() => { if (cur) { cur.raf = 0; cur.dirty.forEach(redrawInk); cur.dirty.clear(); } });
     }
   }
 
@@ -466,9 +695,17 @@ export async function openExam(root, id, goBack) {
   }
 
   /* ---------- 포인터: 펜=필기, 손가락=이동/확대/탭 ---------- */
-  const touches = new Map();
+  const touches = new Map(); // 눌려 있는 손가락
   let g = null; // 터치 제스처
   let inertia = 0;
+  const penIds = new Map(); // 화면에 닿아 있는 펜 id → 마지막 이벤트 시각
+  let penSeenAt = 0; // 마지막 펜 이벤트(호버 포함)
+  // 펜이 닿았거나 막 떼였거나 근처에 떠 있으면 손바닥으로 보고 터치를 무시
+  const penNear = () => {
+    const now = performance.now();
+    for (const [k, t] of penIds) if (now - t > 2000) penIds.delete(k); // 뗀 신호를 놓쳐도 2초 뒤 풀림
+    return penIds.size > 0 || now - penSeenAt < 450;
+  };
 
   function stopInertia() { cancelAnimationFrame(inertia); }
   function startInertia(vx, vy) {
@@ -483,6 +720,7 @@ export async function openExam(root, id, goBack) {
     };
     inertia = requestAnimationFrame(step);
   }
+  function dropTouches() { touches.clear(); g = null; stopInertia(); }
 
   const canInk = () => st.status === 'running';
 
@@ -490,11 +728,14 @@ export async function openExam(root, id, goBack) {
     if (e.target.closest('input')) return;
     document.activeElement?.blur?.();
     if (e.pointerType === 'touch') {
-      if (penDown || performance.now() - penUpAt < 350) return; // 손바닥 무시
+      if (penNear()) return; // 손바닥
+      if (e.width >= 90 || e.height >= 90) return; // 아주 큰 접촉면 = 손바닥
+      if (e.isPrimary) touches.clear(); // 첫 손가락이면 남아 있던 찌꺼기 제거
       stopInertia();
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 1) {
-        g = { mode: 'tap', x0: e.clientX, y0: e.clientY, t0: performance.now(), lx: e.clientX, ly: e.clientY, lt: performance.now(), vx: 0, vy: 0 };
+        const now = performance.now();
+        g = { mode: 'tap', hit: hitOf(e.target), x0: e.clientX, y0: e.clientY, t0: now, lx: e.clientX, ly: e.clientY, lt: now, vx: 0, vy: 0 };
       } else if (touches.size === 2) {
         const [a, b] = [...touches.values()];
         g = { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: z };
@@ -503,21 +744,29 @@ export async function openExam(root, id, goBack) {
     }
     // 펜 / 마우스
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (e.pointerType === 'pen') penDown = true;
+    if (e.pointerType === 'pen') {
+      penIds.set(e.pointerId, performance.now());
+      penSeenAt = performance.now();
+      dropTouches(); // 먼저 닿은 손바닥이 만든 이동/확대를 끊음
+    }
     if (!canInk()) return;
     const hit = pageAt(e.clientX, e.clientY);
     if (!hit) return;
-    scroller.setPointerCapture(e.pointerId);
+    scroller.setPointerCapture?.(e.pointerId);
     const erasing = tool === 'eraser' || (e.pointerType === 'pen' && (e.buttons & 32));
     if (erasing) {
       cur = { mode: 'erase', id: e.pointerId, removed: [], dirty: new Set(), raf: 0 };
       eraseAt(e.clientX, e.clientY);
-    } else {
-      startStroke(e, hit);
+    } else if (!startStroke(e, hit)) {
+      scheduleRender(0); // 아직 그려지지 않은 페이지
     }
   });
 
   scroller.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'pen') {
+      penSeenAt = performance.now();
+      if (penIds.has(e.pointerId)) penIds.set(e.pointerId, penSeenAt);
+    }
     if (e.pointerType !== 'touch') {
       if (tool === 'eraser' && canInk()) {
         ring.hidden = false;
@@ -530,7 +779,7 @@ export async function openExam(root, id, goBack) {
       if (!t || !g) return;
       t.x = e.clientX;
       t.y = e.clientY;
-      if (g.mode === 'pinch' && touches.size === 2) {
+      if (g.mode === 'pinch' && touches.size >= 2) {
         const [a, b] = [...touches.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         const r = scroller.getBoundingClientRect();
@@ -559,30 +808,47 @@ export async function openExam(root, id, goBack) {
     }
   });
 
-  const up = (e) => {
+  // 창 전체에서 손을 뗌/취소를 받아, 놓친 이벤트로 상태가 굳는 일을 막는다
+  const endPointer = (e) => {
+    if (e.pointerType === 'pen') {
+      penIds.delete(e.pointerId);
+      penSeenAt = performance.now();
+    }
     if (e.pointerType === 'touch') {
       const had = touches.delete(e.pointerId);
       if (!had || !g) return;
       if (touches.size === 0) {
-        if (g.mode === 'tap' && performance.now() - g.t0 < 400 && st.status === 'running') {
-          const c = choiceAt(g.x0, g.y0);
-          if (c) toggleMark(c);
-        } else if (g.mode === 'pan' && performance.now() - g.lt < 80) startInertia(g.vx, g.vy);
+        const now = performance.now();
+        if (g.mode === 'tap' && now - g.t0 < 400 && e.type === 'pointerup' && st.status === 'running') {
+          const c = g.hit || choiceAt(g.x0, g.y0);
+          if (c) setMark(c.n, c.c);
+        } else if (g.mode === 'pan' && now - g.lt < 80) startInertia(g.vx, g.vy);
         g = null;
-      } else if (g.mode === 'pinch') g = { mode: 'pan', lx: 0, ly: 0, lt: performance.now(), vx: 0, vy: 0 }; // 남은 손가락은 이동으로
+      } else if (g.mode === 'pinch' && touches.size === 1) {
+        g = { mode: 'pan', lx: 0, ly: 0, lt: performance.now(), vx: 0, vy: 0 }; // 남은 손가락은 이동으로
+      }
       return;
     }
-    if (e.pointerType === 'pen') { penDown = false; penUpAt = performance.now(); }
     if (cur && cur.id === e.pointerId) {
-      const c = cur;
-      if (c.mode === 'pen') {
-        if (e.type === 'pointerup') addPoints(e);
-        endStroke(e.type === 'pointercancel');
+      if (cur.mode === 'pen') {
+        if (e.type === 'pointerup' && !e.noPoint) addPoints(e);
+        endStroke(e.type === 'pointercancel'); // 취소돼도 그린 만큼은 남김
       } else endErase();
     }
   };
-  scroller.addEventListener('pointerup', up);
-  scroller.addEventListener('pointercancel', up);
+  const onTouchEnd = (e) => {
+    if (e.touches.length === 0) setTimeout(() => { touches.clear(); if (g && g.mode !== 'tap') g = null; }, 60);
+  };
+  addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+  addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
+  // iOS Safari는 핀치를 페이지 확대로 처리하므로, 헤더 등 화면 어디서든 제스처 확대를 막음
+  const noGesture = (e) => e.preventDefault();
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, noGesture, { passive: false });
+  addEventListener('pointerup', endPointer, true);
+  addEventListener('pointercancel', endPointer, true);
+  scroller.addEventListener('lostpointercapture', (e) => {
+    if (cur && cur.id === e.pointerId && cur.mode === 'pen') endPointer({ type: 'pointerup', pointerType: e.pointerType, pointerId: e.pointerId, clientX: 0, clientY: 0, noPoint: true });
+  });
   scroller.addEventListener('pointerleave', () => (ring.hidden = true));
 
   // 트랙패드/마우스: Ctrl+휠 = 확대
@@ -592,6 +858,8 @@ export async function openExam(root, id, goBack) {
     const r = scroller.getBoundingClientRect();
     setZoom(z * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
+  // iOS Safari 제스처 이벤트(핀치)는 페이지 확대로 번지지 않게 막음
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) scroller.addEventListener(t, (e) => e.preventDefault());
 
   /* ---------- 타이머 / 상태 전환 ---------- */
   const remaining = () => (st.status === 'running' ? Math.max(0, st.endAt - Date.now()) : st.remainingMs);
@@ -615,7 +883,7 @@ export async function openExam(root, id, goBack) {
         <p class="muted">선택형 ${parsed.questions.length}문항${parsed.shorts.length ? ` · 단답형 ${parsed.shorts.length}문항` : ''} · ${parsed.total}점${parsed.hasKey ? '' : ' · <b>정답표 없음(채점 불가)</b>'}</p>
         <label class="row">제한 시간 <input id="mins" type="number" min="1" max="300" value="${minutes}" inputmode="numeric"> 분</label>
         <button class="primary big" data-a="start">시험 시작</button>
-        <p class="muted small">시작하면 시험지가 보이고 타이머가 흐릅니다. 선지 번호를 탭하면 마킹, 펜슬로 필기합니다.</p>
+        <div class="left">${HELP}</div>
       </div>`;
     } else if (st.status === 'paused') {
       cover.hidden = false;
@@ -627,7 +895,7 @@ export async function openExam(root, id, goBack) {
     paintHeader();
     paintCover();
     renderMarks();
-    refreshNav();
+    if (sheetKind() === 'nav') showNav(true);
     scroller.classList.toggle('locked', st.status === 'ready' || st.status === 'paused');
   }
 
@@ -641,6 +909,7 @@ export async function openExam(root, id, goBack) {
     const m = Math.max(1, Math.min(300, Number(root.querySelector('#mins')?.value) || DEFAULT_MIN));
     st.durationMs = st.remainingMs = m * 60000;
     resume();
+    pages.forEach(renderPage);
   }
   function pause() {
     if (st.status !== 'running') return;
@@ -666,42 +935,58 @@ export async function openExam(root, id, goBack) {
     if (remaining() <= 0) finish();
   }, 250);
 
-  /* ---------- 문항 이동 / 결과 ---------- */
-  function jumpTo(c) {
-    const pg = pages[c.p - 1];
-    const top = pg.el.offsetTop + c.y * s - 90;
-    scroller.scrollTo({ top, behavior: 'smooth' });
-  }
+  /* ---------- 답안지 / 도움말 / 결과 ---------- */
+  const sheetKind = () => (sheet.hidden ? '' : sheet.dataset.kind);
 
-  function refreshNav() {
-    if (sheet.hidden || sheet.dataset.kind !== 'nav') return;
-    showNav(true);
+  function jumpTo(p, y) {
+    const pg = pages[p - 1];
+    scroller.scrollTo({ top: pg.el.offsetTop + y * s - 90, behavior: 'smooth' });
   }
 
   function showNav(keep) {
     const fin = st.status === 'finished';
     const res = st.result?.items || [];
-    const cells = parsed.questions.map((q) => {
+    const keepTop = keep ? sheet.querySelector('.panel')?.scrollTop : 0;
+    const rows = parsed.questions.map((q) => {
       const r = res.find((x) => x.kind === 'q' && x.n === q.n);
-      const cls = fin ? (r?.ok ? 'ok' : 'bad') : st.marks[q.n] ? 'done' : '';
-      return `<button class="cell ${cls}" data-jump="q${q.n}">${q.n}<small>${st.marks[q.n] ? '①②③④⑤'[st.marks[q.n] - 1] : ''}</small></button>`;
+      const bubbles = [1, 2, 3, 4, 5]
+        .map((c) => {
+          const mine = st.marks[q.n] === c;
+          const cls = ['bub', mine ? 'on' : '', fin && q.answer === c ? 'key' : '', fin && mine && q.answer !== c ? 'bad' : ''].join(' ');
+          return `<button class="${cls}" data-mark="${q.n}:${c}" ${st.status === 'running' ? '' : 'disabled'}>${CIRC[c - 1]}</button>`;
+        })
+        .join('');
+      return `<div class="orow ${fin ? (r?.ok ? 'ok' : 'bad') : ''}"><button class="qn" data-jump="q${q.n}">${q.n}</button>${bubbles}</div>`;
     });
-    for (const sa of parsed.shorts) {
+    const shorts = parsed.shorts.map((sa) => {
       const filled = sa.fields.every((f) => (st.texts[`${sa.id}:${f.label}`] || '').trim());
       const okAll = fin && sa.fields.every((f) => res.find((x) => x.kind === 's' && x.id === sa.id && x.label === f.label)?.ok);
-      cells.push(`<button class="cell ${fin ? (okAll ? 'ok' : 'bad') : filled ? 'done' : ''}" data-jump="s${sa.id}">단${sa.id}</button>`);
-    }
+      return `<button class="cell ${fin ? (okAll ? 'ok' : 'bad') : filled ? 'done' : ''}" data-jump="s${sa.id}">단답형 ${sa.id}${filled ? ' ✓' : ''}</button>`;
+    });
     const done = Object.keys(st.marks).length;
     sheet.dataset.kind = 'nav';
     sheet.hidden = false;
-    sheet.innerHTML = `<div class="panel"><div class="ph"><b>문항 ${done}/${parsed.questions.length} 마킹</b><button data-a="closesheet">닫기</button></div><div class="grid">${cells.join('')}</div></div>`;
-    if (!keep) sheet.scrollTop = 0;
+    sheet.innerHTML = `<div class="panel"><div class="ph"><b>답안지 · ${done}/${parsed.questions.length} 마킹</b><button data-a="closesheet">닫기</button></div>
+      <p class="muted small">번호(①~⑤)를 누르면 마킹, 다시 누르면 해제. 왼쪽 문항 번호를 누르면 그 문제로 이동합니다.</p>
+      <div class="omr">${rows.join('')}</div>${shorts.length ? `<div class="shorts">${shorts.join('')}</div>` : ''}</div>`;
+    const panel = sheet.querySelector('.panel');
+    if (keepTop) panel.scrollTop = keepTop;
+  }
+
+  function showHelp() {
+    sheet.dataset.kind = 'help';
+    sheet.hidden = false;
+    const px = pages.reduce((a, pg) => a + (pg.pdf ? pg.pdf.width * pg.pdf.height * 2 : 0), 0) + live.width * live.height;
+    const ls = stats.last;
+    const diag = `기기 배율 ${dpr} · 확대 ${Math.round(z * 100)}% · 캔버스 ${(px / 1e6).toFixed(1)}백만 픽셀(약 ${Math.round((px * 4) / 1e6)}MB)` +
+      (ls ? ` · 마지막 획: 점 ${ls.n}개, ${ls.ms}ms, 점 간격 평균 ${ls.dt}ms` : '') + ` · 눌린 터치 ${touches.size}`;
+    sheet.innerHTML = `<div class="panel"><div class="ph"><b>사용법</b><button data-a="closesheet">닫기</button></div>${HELP}<p class="muted small">진단: ${diag}</p></div>`;
   }
 
   function showResult() {
     const r = st.result || grade(parsed, st);
     const wrong = r.items.filter((x) => !x.ok);
-    const circ = (n) => (n ? '①②③④⑤'[n - 1] : '–');
+    const circ = (n) => (n ? CIRC[n - 1] : '–');
     const rows = r.items
       .map((x) => {
         const mine = x.kind === 'q' ? circ(x.mine) : esc(x.mine || '–');
@@ -723,34 +1008,55 @@ export async function openExam(root, id, goBack) {
   async function resetAll() {
     if (!confirm('필기·마킹·기록을 모두 지우고 처음부터 다시 풉니다.')) return;
     await db.put('state', id, newState());
-    doneCleanup();
+    cleanup();
     openExam(root, id, goBack);
   }
 
-  /* ---------- 버튼 ---------- */
-  function doneCleanup() {
+  function cleanup() {
     clearInterval(tick);
     clearTimeout(rt);
+    clearTimeout(saveT);
     io.disconnect();
     removeEventListener('resize', onResize);
     removeEventListener('pagehide', flush);
+    removeEventListener('touchend', onTouchEnd, true);
+    removeEventListener('touchcancel', onTouchEnd, true);
+    for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.removeEventListener(t, noGesture);
+    removeEventListener('pointerup', endPointer, true);
+    removeEventListener('pointercancel', endPointer, true);
     document.removeEventListener('visibilitychange', onHide);
     stopInertia();
     pages.forEach(release);
+    live.width = live.height = 0;
     doc.destroy?.();
   }
 
   root.querySelector('.exam').addEventListener('click', async (e) => {
+    if (e.target === sheet) { sheet.hidden = true; return; } // 바깥을 누르면 닫기
+    const hit = hitOf(e.target);
+    if (hit) return setMark(hit.n, hit.c);
+    const mk = e.target.closest('[data-mark]');
+    if (mk) {
+      const [n, c] = mk.dataset.mark.split(':').map(Number);
+      return setMark(n, c);
+    }
     const j = e.target.closest('[data-jump]');
     if (j) {
       const v = j.dataset.jump;
-      const c = v[0] === 'q' ? marksByQ.get(Number(v.slice(1)))?.choices[0] : { p: parsed.shorts.find((a) => a.id === Number(v.slice(1)))?.p, y: parsed.shorts.find((a) => a.id === Number(v.slice(1)))?.fields[0]?.y };
-      if (c?.p) { sheet.hidden = true; jumpTo(c); }
+      let p, y;
+      if (v[0] === 'q') {
+        const c = qByN.get(Number(v.slice(1)))?.choices[0];
+        p = c?.p; y = c?.y;
+      } else {
+        const sa = parsed.shorts.find((a) => a.id === Number(v.slice(1)));
+        p = sa?.p; y = sa?.fields[0]?.y;
+      }
+      if (p) { sheet.hidden = true; jumpTo(p, y); }
       return;
     }
     const a = e.target.closest('[data-a]')?.dataset.a;
     if (!a) return;
-    if (a === 'back') { await flush(); doneCleanup(); goBack(); }
+    if (a === 'back') { await flush(); cleanup(); goBack(); }
     else if (a === 'pen' || a === 'eraser') {
       tool = a;
       root.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.a === a));
@@ -760,7 +1066,9 @@ export async function openExam(root, id, goBack) {
     else if (a === 'redo') doRedo();
     else if (a === 'zoomin') setZoom(z * 1.25, ...center());
     else if (a === 'zoomout') setZoom(z / 1.25, ...center());
-    else if (a === 'nav') (sheet.hidden || sheet.dataset.kind !== 'nav') ? showNav() : (sheet.hidden = true);
+    else if (a === 'zoomreset') setZoom(1, ...center());
+    else if (a === 'nav') sheetKind() === 'nav' ? (sheet.hidden = true) : showNav();
+    else if (a === 'help') sheetKind() === 'help' ? (sheet.hidden = true) : showHelp();
     else if (a === 'pause') st.status === 'paused' ? resume() : pause();
     else if (a === 'resume') resume();
     else if (a === 'start') start();
@@ -775,5 +1083,5 @@ export async function openExam(root, id, goBack) {
 
   setStatus();
   if (st.status === 'running' && remaining() <= 0) finish();
-  window.__exam = { st, pages, parsed, get s() { return s; }, setZoom }; // 디버그/테스트용
+  window.__exam = { st, pages, parsed, get s() { return s; }, get z() { return z; }, setZoom, get live() { return live; } }; // 디버그/테스트용
 }

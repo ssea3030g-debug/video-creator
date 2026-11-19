@@ -104,7 +104,7 @@ export async function openExam(root, id, goBack) {
   const save = () => {
     clearTimeout(saveT);
     saveT = setTimeout(function tryNow() {
-      if (cur || touches.size) saveT = setTimeout(tryNow, 800);
+      if (cur || tg) saveT = setTimeout(tryNow, 800);
       else flush();
     }, 1500);
   };
@@ -581,6 +581,18 @@ export async function openExam(root, id, goBack) {
       if (!b) cur.box = [x, y, x, y];
       else { b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y); }
     }
+    // Pencil이 가려는 방향을 예측한 점 1~2개: 미리보기에만 쓰고 저장하지 않음 (선 끝이 펜끝을 더 가깝게 따라옴)
+    cur.pred = [];
+    if (e.pointerType === 'pen' && e.getPredictedEvents && p.length >= 6) {
+      let pe = [];
+      try { pe = e.getPredictedEvents() || []; } catch { pe = []; }
+      const lx = p[p.length - 3], ly = p[p.length - 2];
+      for (const ev of pe.slice(0, 2)) {
+        const x = (ev.clientX - r.left) / s, y = (ev.clientY - r.top) / s;
+        if (!(Math.hypot((x - lx) * s, (y - ly) * s) <= 28)) break; // 크게 빗나간 예측은 버림
+        cur.pred.push(x, y, Math.max(0.05, ev.pressure || 0.5));
+      }
+    }
     if (!cur.raf) cur.raf = requestAnimationFrame(paintLive);
   }
 
@@ -595,12 +607,21 @@ export async function openExam(root, id, goBack) {
     if (!cur || cur.mode !== 'pen') return;
     cur.raf = 0;
     const { pg } = cur;
+    // 지우는 영역에 예측 점 범위까지 포함 (박스는 커지기만 하므로 이전 프레임의 예측 잔상도 함께 지워짐)
+    if (cur.pred?.length) {
+      const bx = cur.box;
+      for (let i = 0; i < cur.pred.length; i += 3) {
+        bx[0] = Math.min(bx[0], cur.pred[i]); bx[2] = Math.max(bx[2], cur.pred[i]);
+        bx[1] = Math.min(bx[1], cur.pred[i + 1]); bx[3] = Math.max(bx[3], cur.pred[i + 1]);
+      }
+    }
     const [dx, dy, dw, dh] = dirtyRect(pg, cur.box);
     lctx.setTransform(1, 0, 0, 1, 0, 0);
     lctx.clearRect(dx, dy, dw, dh);
     lctx.setTransform(pg.rs, 0, 0, pg.rs, -pg.win[0] * pg.rs, -pg.win[1] * pg.rs);
     lctx.fillStyle = '#111';
-    lctx.fill(livePath(cur.stroke));
+    const withPred = cur.pred?.length ? { ...cur.stroke, pts: cur.stroke.pts.concat(cur.pred) } : cur.stroke;
+    lctx.fill(livePath(withPred));
   }
 
   function endStroke(cancelled) {
@@ -694,9 +715,12 @@ export async function openExam(root, id, goBack) {
     save();
   }
 
-  /* ---------- 포인터: 펜=필기, 손가락=이동/확대/탭 ---------- */
-  const touches = new Map(); // 눌려 있는 손가락
-  let g = null; // 터치 제스처
+  /* ---------- 입력: 펜/마우스 = 필기(pointer 이벤트), 손가락 = 이동·확대(touch 이벤트의 '현재 목록'만 신뢰) ---------- */
+  // 손가락 상태를 pointerup/cancel 같은 개별 신호로 따로 기억하면, 신호 하나만 놓쳐도 "남은 손가락"이 생겨
+  // 한 손가락이 두 손가락처럼 취급되고 배율이 폭주한다. touch 이벤트의 e.touches는 매번 '지금 화면에 있는 전부'를
+  // 알려 주므로 상태가 굳을 수 없다.
+  let tg = null; // 손가락 제스처 {key, n, mode:'pan'|'pinch', ...}
+  const own = new Set(); // 시험지 영역에서 시작한 손가락 id (화면이 다시 그려져 대상 요소가 사라져도 유지)
   let inertia = 0;
   const penIds = new Map(); // 화면에 닿아 있는 펜 id → 마지막 이벤트 시각
   let penSeenAt = 0; // 마지막 펜 이벤트(호버 포함)
@@ -720,29 +744,106 @@ export async function openExam(root, id, goBack) {
     };
     inertia = requestAnimationFrame(step);
   }
-  function dropTouches() { touches.clear(); g = null; stopInertia(); }
+  function dropTouches() { tg = null; own.clear(); stopInertia(); }
+
+  const MIN_PINCH = 80; // 두 손가락이 이보다 가까워도 기준 거리는 80px (배율 폭주 방지)
+  const MAX_STEP = 1.2; // 한 번의 터치 이벤트로 배율이 바뀔 수 있는 최대 비율
+
+  const fingersOf = (e) => {
+    const out = [];
+    for (const t of e.touches) {
+      if (t.touchType === 'stylus' || !own.has(t.identifier)) continue;
+      if ((t.radiusX || 0) >= 70 || (t.radiusY || 0) >= 70) continue; // 큰 접촉면 = 손바닥
+      out.push({ id: t.identifier, x: t.clientX, y: t.clientY });
+    }
+    return out.sort((p, q) => p.id - q.id);
+  };
+
+  // 손가락 수/구성이 바뀔 때마다 기준을 새로 잡는다 (이전 제스처의 값이 섞이지 않게)
+  function rebase(f, now) {
+    stopInertia();
+    const key = f.map((t) => t.id).join(',');
+    if (f.length === 1) {
+      tg = { key, n: 1, mode: 'pan', lx: f[0].x, ly: f[0].y, lt: now, vx: 0, vy: 0, x0: f[0].x, y0: f[0].y, moved: false };
+    } else {
+      const [a, b] = f;
+      const r = scroller.getBoundingClientRect();
+      const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
+      tg = {
+        key, n: f.length, mode: 'pinch', a: a.id, b: b.id,
+        d0: Math.max(MIN_PINCH, Math.hypot(a.x - b.x, a.y - b.y)),
+        z0: z, s0: s, ox: scroller.scrollLeft + cx, oy: scroller.scrollTop + cy,
+      };
+    }
+  }
+
+  // 기준 시점의 배율·스크롤에서 계산하므로 오차가 쌓이지 않고, 두 손가락 중심이 움직이면 이동도 함께 따라간다
+  function zoomFromGesture(nz, cx, cy) {
+    nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nz));
+    nz = Math.max(z / MAX_STEP, Math.min(z * MAX_STEP, nz));
+    if (Math.abs(nz - z) < 1e-4 && cx == null) return;
+    z = nz;
+    const ns = fit() * z;
+    const r = ns / tg.s0;
+    applyScale(ns);
+    scroller.scrollLeft = tg.ox * r - cx;
+    scroller.scrollTop = tg.oy * r - cy;
+    scheduleRender();
+  }
+
+  function onTouch(e) {
+    if (e.type === 'touchstart') {
+      for (const t of e.changedTouches) if (scroller.contains(t.target) && !t.target.closest?.('input')) own.add(t.identifier);
+      document.activeElement?.blur?.();
+    }
+    // 화면에 없는 손가락 id는 정리
+    const live = new Set([...e.touches].map((t) => t.identifier));
+    for (const id of own) if (!live.has(id)) own.delete(id);
+    if (penNear()) { tg = null; return; }
+    const f = fingersOf(e);
+    const now = performance.now();
+    if (!f.length) {
+      if (tg && tg.mode === 'pan' && tg.moved && now - tg.lt < 80) startInertia(tg.vx, tg.vy);
+      tg = null;
+      return;
+    }
+    const key = f.map((t) => t.id).join(',');
+    if (!tg || tg.key !== key) { rebase(f, now); return; }
+    if (e.type !== 'touchmove') return;
+
+    if (tg.mode === 'pinch') {
+      const a = f.find((t) => t.id === tg.a), b = f.find((t) => t.id === tg.b);
+      if (!a || !b) { rebase(f, now); return; }
+      const d = Math.max(MIN_PINCH, Math.hypot(a.x - b.x, a.y - b.y));
+      const r = scroller.getBoundingClientRect();
+      zoomFromGesture(tg.z0 * (d / tg.d0), (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      if (e.cancelable) e.preventDefault();
+    } else {
+      const t = f[0];
+      if (!tg.moved && Math.hypot(t.x - tg.x0, t.y - tg.y0) > 6) { tg.moved = true; tg.lx = t.x; tg.ly = t.y; tg.lt = now; return; }
+      if (!tg.moved) return; // 탭: 스크롤하지 않음 (선지 탭은 click이 처리)
+      const dx = t.x - tg.lx, dy = t.y - tg.ly;
+      scroller.scrollLeft -= dx;
+      scroller.scrollTop -= dy;
+      const dt = Math.max(1, now - tg.lt);
+      tg.vx = 0.8 * tg.vx + 0.2 * (dx / dt);
+      tg.vy = 0.8 * tg.vy + 0.2 * (dy / dt);
+      tg.lx = t.x; tg.ly = t.y; tg.lt = now;
+      if (e.cancelable) e.preventDefault();
+    }
+  }
+  scroller.addEventListener('touchstart', onTouch, { passive: true });
+  scroller.addEventListener('touchmove', onTouch, { passive: false });
+  // 손을 뗀 곳이 어디든(화면 밖 포함) 받도록 창 전체에서 듣는다
+  addEventListener('touchend', onTouch, { passive: true, capture: true });
+  addEventListener('touchcancel', onTouch, { passive: true, capture: true });
 
   const canInk = () => st.status === 'running';
 
   scroller.addEventListener('pointerdown', (e) => {
     if (e.target.closest('input')) return;
     document.activeElement?.blur?.();
-    if (e.pointerType === 'touch') {
-      if (penNear()) return; // 손바닥
-      if (e.width >= 90 || e.height >= 90) return; // 아주 큰 접촉면 = 손바닥
-      if (e.isPrimary) touches.clear(); // 첫 손가락이면 남아 있던 찌꺼기 제거
-      stopInertia();
-      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (touches.size === 1) {
-        const now = performance.now();
-        g = { mode: 'tap', hit: hitOf(e.target), x0: e.clientX, y0: e.clientY, t0: now, lx: e.clientX, ly: e.clientY, lt: now, vx: 0, vy: 0 };
-      } else if (touches.size === 2) {
-        const [a, b] = [...touches.values()];
-        g = { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: z };
-      }
-      return;
-    }
-    // 펜 / 마우스
+    if (e.pointerType === 'touch') return; // 손가락은 위 touch 이벤트로 처리
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.pointerType === 'pen') {
       penIds.set(e.pointerId, performance.now());
@@ -763,43 +864,16 @@ export async function openExam(root, id, goBack) {
   });
 
   scroller.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch') return;
     if (e.pointerType === 'pen') {
       penSeenAt = performance.now();
       if (penIds.has(e.pointerId)) penIds.set(e.pointerId, penSeenAt);
     }
-    if (e.pointerType !== 'touch') {
-      if (tool === 'eraser' && canInk()) {
-        ring.hidden = false;
-        const d = 18;
-        ring.style.cssText = `width:${d}px;height:${d}px;transform:translate(${e.clientX - d / 2}px,${e.clientY - d / 2}px)`;
-      } else ring.hidden = true;
-    }
-    if (e.pointerType === 'touch') {
-      const t = touches.get(e.pointerId);
-      if (!t || !g) return;
-      t.x = e.clientX;
-      t.y = e.clientY;
-      if (g.mode === 'pinch' && touches.size >= 2) {
-        const [a, b] = [...touches.values()];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        const r = scroller.getBoundingClientRect();
-        setZoom(g.z0 * (d / g.d0), (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
-      } else if (touches.size === 1) {
-        if (g.mode === 'tap' && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 8) g.mode = 'pan';
-        if (g.mode === 'pan' && g.lx === 0) { g.lx = e.clientX; g.ly = e.clientY; return; }
-        if (g.mode === 'pan') {
-          const now = performance.now();
-          const dx = e.clientX - g.lx, dy = e.clientY - g.ly;
-          scroller.scrollLeft -= dx;
-          scroller.scrollTop -= dy;
-          const dt = Math.max(1, now - g.lt);
-          g.vx = 0.8 * g.vx + 0.2 * (dx / dt);
-          g.vy = 0.8 * g.vy + 0.2 * (dy / dt);
-          g.lx = e.clientX; g.ly = e.clientY; g.lt = now;
-        }
-      }
-      return;
-    }
+    if (tool === 'eraser' && canInk()) {
+      ring.hidden = false;
+      const d = 18;
+      ring.style.cssText = `width:${d}px;height:${d}px;transform:translate(${e.clientX - d / 2}px,${e.clientY - d / 2}px)`;
+    } else ring.hidden = true;
     if (!cur || cur.id !== e.pointerId) return;
     if (cur.mode === 'pen') addPoints(e);
     else if (cur.mode === 'erase') {
@@ -810,24 +884,10 @@ export async function openExam(root, id, goBack) {
 
   // 창 전체에서 손을 뗌/취소를 받아, 놓친 이벤트로 상태가 굳는 일을 막는다
   const endPointer = (e) => {
+    if (e.pointerType === 'touch') return;
     if (e.pointerType === 'pen') {
       penIds.delete(e.pointerId);
       penSeenAt = performance.now();
-    }
-    if (e.pointerType === 'touch') {
-      const had = touches.delete(e.pointerId);
-      if (!had || !g) return;
-      if (touches.size === 0) {
-        const now = performance.now();
-        if (g.mode === 'tap' && now - g.t0 < 400 && e.type === 'pointerup' && st.status === 'running') {
-          const c = g.hit || choiceAt(g.x0, g.y0);
-          if (c) setMark(c.n, c.c);
-        } else if (g.mode === 'pan' && now - g.lt < 80) startInertia(g.vx, g.vy);
-        g = null;
-      } else if (g.mode === 'pinch' && touches.size === 1) {
-        g = { mode: 'pan', lx: 0, ly: 0, lt: performance.now(), vx: 0, vy: 0 }; // 남은 손가락은 이동으로
-      }
-      return;
     }
     if (cur && cur.id === e.pointerId) {
       if (cur.mode === 'pen') {
@@ -836,11 +896,6 @@ export async function openExam(root, id, goBack) {
       } else endErase();
     }
   };
-  const onTouchEnd = (e) => {
-    if (e.touches.length === 0) setTimeout(() => { touches.clear(); if (g && g.mode !== 'tap') g = null; }, 60);
-  };
-  addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
-  addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
   // iOS Safari는 핀치를 페이지 확대로 처리하므로, 헤더 등 화면 어디서든 제스처 확대를 막음
   const noGesture = (e) => e.preventDefault();
   for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, noGesture, { passive: false });
@@ -979,7 +1034,7 @@ export async function openExam(root, id, goBack) {
     const px = pages.reduce((a, pg) => a + (pg.pdf ? pg.pdf.width * pg.pdf.height * 2 : 0), 0) + live.width * live.height;
     const ls = stats.last;
     const diag = `기기 배율 ${dpr} · 확대 ${Math.round(z * 100)}% · 캔버스 ${(px / 1e6).toFixed(1)}백만 픽셀(약 ${Math.round((px * 4) / 1e6)}MB)` +
-      (ls ? ` · 마지막 획: 점 ${ls.n}개, ${ls.ms}ms, 점 간격 평균 ${ls.dt}ms` : '') + ` · 눌린 터치 ${touches.size}`;
+      (ls ? ` · 마지막 획: 점 ${ls.n}개, ${ls.ms}ms, 점 간격 평균 ${ls.dt}ms` : '') + ` · 눌린 손가락 ${tg ? tg.n : 0}`;
     sheet.innerHTML = `<div class="panel"><div class="ph"><b>사용법</b><button data-a="closesheet">닫기</button></div>${HELP}<p class="muted small">진단: ${diag}</p></div>`;
   }
 
@@ -1019,8 +1074,8 @@ export async function openExam(root, id, goBack) {
     io.disconnect();
     removeEventListener('resize', onResize);
     removeEventListener('pagehide', flush);
-    removeEventListener('touchend', onTouchEnd, true);
-    removeEventListener('touchcancel', onTouchEnd, true);
+    removeEventListener('touchend', onTouch, true);
+    removeEventListener('touchcancel', onTouch, true);
     for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.removeEventListener(t, noGesture);
     removeEventListener('pointerup', endPointer, true);
     removeEventListener('pointercancel', endPointer, true);

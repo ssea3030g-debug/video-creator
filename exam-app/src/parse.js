@@ -121,8 +121,12 @@ function parseShortBlanks(examPages, warnings) {
         if (!m) continue;
         const sa = { id: Number(m[1]), p: pg.p, fields: [] };
         // 헤더 아래에서 ": (   )" 빈칸이 있는 첫 줄
+        const hasBlank = (its) => its.some((i) => /^\s*[:：]?\s*\(\s*$/.test(i.s));
         for (let lj = li + 1; lj < lines.length && lj < li + 25; lj++) {
           const its = lines[lj].items;
+          // 다음 문제·지문·단답형 제목이 나오면 여기서 끝
+          if (/^\s*\[\s*(\d+\s*~|단답형)/.test(lines[lj].text.replace(/\s+/g, ' '))) break; // [10~14] 같은 지문 제목만 (배점 [3점]은 제외)
+          if (sa.fields.length && !hasBlank(its)) break;
           for (let k = 0; k < its.length; k++) {
             let it = its[k];
             let row = its;
@@ -152,7 +156,6 @@ function parseShortBlanks(examPages, warnings) {
               h: it.h * 1.5,
             });
           }
-          if (sa.fields.length) break;
         }
         if (!sa.fields.length) warnings.push(`단답형 ${sa.id} 빈칸 위치 미검출`);
         shorts.push(sa);

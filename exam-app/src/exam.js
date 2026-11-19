@@ -50,13 +50,14 @@ export async function openExam(root, id, goBack) {
   }
   const parsed = rec.parsed;
   const st = (await db.get('state', id)) || newState();
+  const noTimer = !!rec.noTimer; // 타이머 없이 풀이 (N제)
 
   root.innerHTML = `
   <div class="exam">
     <header class="bar">
       <button data-a="back">‹ 목록</button>
       <div class="title">${esc(rec.name)}</div>
-      <div class="timer" id="timer">45:00</div>
+      <div class="timer" id="timer" ${noTimer ? 'hidden' : ''}>45:00</div>
       <div class="tools">
         <button data-a="pen" class="tool on">펜</button>
         <button data-a="eraser" class="tool">지우개</button>
@@ -67,7 +68,7 @@ export async function openExam(root, id, goBack) {
         <button data-a="zoomin" aria-label="확대">＋</button>
         <button data-a="nav">답안지</button>
         <button data-a="help" aria-label="사용법">?</button>
-        <button data-a="pause">일시정지</button>
+        <button data-a="pause" ${noTimer ? 'hidden' : ''}>일시정지</button>
         <button data-a="submit" class="primary">제출</button>
       </div>
     </header>
@@ -917,9 +918,10 @@ export async function openExam(root, id, goBack) {
   for (const t of ['gesturestart', 'gesturechange', 'gestureend']) scroller.addEventListener(t, (e) => e.preventDefault());
 
   /* ---------- 타이머 / 상태 전환 ---------- */
-  const remaining = () => (st.status === 'running' ? Math.max(0, st.endAt - Date.now()) : st.remainingMs);
+  const remaining = () => (st.status === 'running' && !noTimer ? Math.max(0, st.endAt - Date.now()) : st.remainingMs);
 
   function paintHeader() {
+    if (noTimer) { root.querySelector('[data-a=submit]').textContent = st.status === 'finished' ? '결과' : '제출'; return; }
     const rem = remaining();
     timerEl.textContent = fmt(rem);
     timerEl.classList.toggle('low', st.status === 'running' && rem < 5 * 60000);
@@ -935,8 +937,8 @@ export async function openExam(root, id, goBack) {
       cover.hidden = false;
       cover.innerHTML = `<div class="card">
         <h2>${esc(rec.name)}</h2>
-        <p class="muted">선택형 ${parsed.questions.length}문항${parsed.shorts.length ? ` · 단답형 ${parsed.shorts.length}문항` : ''} · ${parsed.total}점${parsed.hasKey ? '' : ' · <b>정답표 없음(채점 불가)</b>'}</p>
-        <label class="row">제한 시간 <input id="mins" type="number" min="1" max="300" value="${minutes}" inputmode="numeric"> 분</label>
+        <p class="muted">선택형 ${parsed.questions.length}문항${parsed.shorts.length ? ` · 단답형 ${parsed.shorts.length}문항` : ''}${parsed.hasKey ? ` · ${parsed.total}점` : ' · <b>정답표 없음(채점 불가)</b>'}</p>
+        ${noTimer ? '<p class="muted">타이머 없이 자유롭게 풀이합니다.</p>' : `<label class="row">제한 시간 <input id="mins" type="number" min="1" max="300" value="${minutes}" inputmode="numeric"> 분</label>`}
         <button class="primary big" data-a="start">시험 시작</button>
         <div class="left">${HELP}</div>
       </div>`;
@@ -961,8 +963,10 @@ export async function openExam(root, id, goBack) {
     flush();
   }
   function start() {
-    const m = Math.max(1, Math.min(300, Number(root.querySelector('#mins')?.value) || DEFAULT_MIN));
-    st.durationMs = st.remainingMs = m * 60000;
+    if (!noTimer) {
+      const m = Math.max(1, Math.min(300, Number(root.querySelector('#mins')?.value) || DEFAULT_MIN));
+      st.durationMs = st.remainingMs = m * 60000;
+    }
     resume();
     pages.forEach(renderPage);
   }
@@ -985,7 +989,7 @@ export async function openExam(root, id, goBack) {
   }
 
   const tick = setInterval(() => {
-    if (st.status !== 'running') return;
+    if (st.status !== 'running' || noTimer) return;
     paintHeader();
     if (remaining() <= 0) finish();
   }, 250);
@@ -1054,7 +1058,7 @@ export async function openExam(root, id, goBack) {
     sheet.innerHTML = `<div class="panel wide">
       <div class="ph"><b>결과</b><button data-a="closesheet">닫기</button></div>
       <div class="score"><span>${r.earned}</span> / ${r.total}점</div>
-      <p class="muted center">정답 ${r.items.length - wrong.length} · 오답 ${wrong.length} · 사용 시간 ${fmt(st.durationMs - st.remainingMs)}${parsed.hasKey ? '' : ' · 정답표가 없어 채점되지 않았습니다'}</p>
+      <p class="muted center">정답 ${r.items.length - wrong.length} · 오답 ${wrong.length} ${noTimer ? '' : ` · 사용 시간 ${fmt(st.durationMs - st.remainingMs)}`}${parsed.hasKey ? '' : ' · 정답표가 없어 채점되지 않았습니다'}</p>
       <div class="actions"><button data-a="retry">다시 풀기 (초기화)</button><button data-a="review" class="primary">시험지로 돌아가기</button></div>
       <table class="res"><thead><tr><th>문항</th><th>내 답</th><th>정답</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
@@ -1137,6 +1141,6 @@ export async function openExam(root, id, goBack) {
   });
 
   setStatus();
-  if (st.status === 'running' && remaining() <= 0) finish();
+  if (st.status === 'running' && !noTimer && remaining() <= 0) finish();
   window.__exam = { st, pages, parsed, get s() { return s; }, get z() { return z; }, setZoom, get live() { return live; } }; // 디버그/테스트용
 }

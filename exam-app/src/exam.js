@@ -416,10 +416,20 @@ export async function openExam(root, id, goBack) {
     pg.rs = 0;
   }
 
+  // 손가락이 움직이거나 스크롤 중에는 PDF를 다시 그리지 않는다 (그리면 프레임이 떨어짐). 멈춘 뒤에 한 페이지씩 그린다.
+  let busyUntil = 0;
+  const markBusy = () => { busyUntil = performance.now() + 280; };
+  const isBusy = () => !!tg || !!cur || performance.now() < busyUntil;
   let rt = 0;
   const scheduleRender = (delay = 140) => {
     clearTimeout(rt);
-    rt = setTimeout(() => pages.forEach(renderPage), delay);
+    const run = async () => {
+      for (const pg of pages) {
+        if (isBusy()) { rt = setTimeout(run, 120); return; }
+        await renderPage(pg);
+      }
+    };
+    rt = setTimeout(run, delay);
   };
 
   const io = new IntersectionObserver(
@@ -470,7 +480,7 @@ export async function openExam(root, id, goBack) {
     scheduleRender(200);
   };
   addEventListener('resize', onResize);
-  scroller.addEventListener('scroll', () => scheduleRender(160), { passive: true });
+  scroller.addEventListener('scroll', () => { markBusy(); scheduleRender(300); }, { passive: true });
 
   /* ---------- 좌표 / 히트 테스트 ---------- */
   function pageAt(x, y) {
@@ -780,6 +790,7 @@ export async function openExam(root, id, goBack) {
 
   // 기준 시점의 배율·스크롤에서 계산하므로 오차가 쌓이지 않고, 두 손가락 중심이 움직이면 이동도 함께 따라간다
   function zoomFromGesture(nz, cx, cy) {
+    markBusy();
     nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nz));
     nz = Math.max(z / MAX_STEP, Math.min(z * MAX_STEP, nz));
     if (Math.abs(nz - z) < 1e-4 && cx == null) return;
@@ -811,6 +822,7 @@ export async function openExam(root, id, goBack) {
     const key = f.map((t) => t.id).join(',');
     if (!tg || tg.key !== key) { rebase(f, now); return; }
     if (e.type !== 'touchmove') return;
+    markBusy();
 
     if (tg.mode === 'pinch') {
       const a = f.find((t) => t.id === tg.a), b = f.find((t) => t.id === tg.b);
@@ -833,8 +845,9 @@ export async function openExam(root, id, goBack) {
       if (e.cancelable) e.preventDefault();
     }
   }
-  scroller.addEventListener('touchstart', onTouch, { passive: true });
-  scroller.addEventListener('touchmove', onTouch, { passive: false });
+  // 터치 이벤트는 창 전체에서 받는다. 처음 닿았던 캔버스가 다시 그려지며 사라지면 scroller까지 전달되지 않기 때문
+  addEventListener('touchstart', onTouch, { passive: true, capture: true });
+  addEventListener('touchmove', onTouch, { passive: false, capture: true });
   // 손을 뗀 곳이 어디든(화면 밖 포함) 받도록 창 전체에서 듣는다
   addEventListener('touchend', onTouch, { passive: true, capture: true });
   addEventListener('touchcancel', onTouch, { passive: true, capture: true });
@@ -1078,6 +1091,8 @@ export async function openExam(root, id, goBack) {
     io.disconnect();
     removeEventListener('resize', onResize);
     removeEventListener('pagehide', flush);
+    removeEventListener('touchstart', onTouch, true);
+    removeEventListener('touchmove', onTouch, true);
     removeEventListener('touchend', onTouch, true);
     removeEventListener('touchcancel', onTouch, true);
     for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.removeEventListener(t, noGesture);
@@ -1142,5 +1157,5 @@ export async function openExam(root, id, goBack) {
 
   setStatus();
   if (st.status === 'running' && !noTimer && remaining() <= 0) finish();
-  window.__exam = { st, pages, parsed, get s() { return s; }, get z() { return z; }, setZoom, get live() { return live; } }; // 디버그/테스트용
+  window.__exam = { st, pages, parsed, get s() { return s; }, get z() { return z; }, setZoom, get live() { return live; }, get tg() { return tg; }, get own() { return [...own]; } }; // 디버그/테스트용
 }

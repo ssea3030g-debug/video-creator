@@ -15,7 +15,7 @@ export async function addPaper(file, opts = {}) {
   if (!parsed.questions.length) throw new Error('문항을 찾지 못했습니다. 번호(1. 2. …)와 ①~⑤ 선지가 있는 텍스트 PDF인지 확인해 주세요.');
   await db.put('files', id, buf);
   const name = opts.name || file.name.replace(/\.pdf$/i, '');
-  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '' });
+  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '', order: opts.order });
   return { id, dup: false, parsed };
 }
 
@@ -31,10 +31,13 @@ export async function seedBuiltin(onProgress) {
     return;
   }
   // 이미 가져온 시험지의 이름이 목록과 다르면 새 이름으로 바꾼다 (예: v3 설명 추가)
-  const byFile = new Map(list.map((it) => [it.file, it]));
+  const byFile = new Map(list.map((it, i) => [it.file, { it, order: i }]));
   for (const rec of await db.all('papers')) {
-    const it = byFile.get(rec.src);
-    if (it && it.name !== rec.name) await db.put('papers', rec.id, { ...rec, name: it.name });
+    const hit = byFile.get(rec.src);
+    if (!hit) continue;
+    if (hit.it.name !== rec.name || rec.order !== hit.order) {
+      await db.put('papers', rec.id, { ...rec, name: hit.it.name, order: hit.order });
+    }
   }
   for (const rec of await db.all('papers')) {
     if (RETIRED.includes(rec.src) || /^2026 독서와 작문 고난도 N제 \(156문항\)/.test(rec.name)) {
@@ -51,7 +54,7 @@ export async function seedBuiltin(onProgress) {
       if (!res.ok) continue;
       const blob = await res.blob();
       const file = new File([blob], item.file.split('/').pop(), { type: 'application/pdf' });
-      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file });
+      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file, order: i });
       await db.put('state', key, true);
     } catch (err) {
       console.error(err);
@@ -104,7 +107,7 @@ export async function openLibrary(root, go) {
   };
 
   async function refresh() {
-    const papers = (await db.all('papers')).sort((a, b) => b.addedAt - a.addedAt);
+    const papers = (await db.all('papers')).sort((a, b) => (a.order ?? 1e6) - (b.order ?? 1e6) || b.addedAt - a.addedAt);
     if (!papers.length) {
       list.innerHTML = '<p class="empty">아직 시험지가 없습니다.<br>본문과 정답·해설이 함께 있는 PDF를 추가해 보세요.</p>';
       return;

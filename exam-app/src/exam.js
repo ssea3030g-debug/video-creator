@@ -140,6 +140,23 @@ export async function openExam(root, id, goBack) {
     }
   }
 
+  // 선지 터치 버튼: 번호와 문장 전체. 브라우저가 직접 탭(click)을 처리하므로 손가락·펜슬·마우스 모두 동작
+  for (const q of parsed.questions) {
+    for (const c of q.choices) {
+      const pg = pages[c.p - 1];
+      if (!pg) continue;
+      const r = c.r || [c.x - 5, c.y - 3, c.x + 200, c.y + c.h + 3];
+      const b = document.createElement('button');
+      b.className = 'hit';
+      b.type = 'button';
+      b.dataset.n = q.n;
+      b.dataset.c = c.c;
+      b.setAttribute('aria-label', `${q.n}번 ${CIRC[c.c - 1]}`);
+      b.style.cssText = `left:${r[0]}px;top:${r[1]}px;width:${r[2] - r[0]}px;height:${r[3] - r[1]}px`;
+      pg.layer.append(b);
+    }
+  }
+
   // 단답형 입력칸
   for (const sa of parsed.shorts) {
     const pg = pages[sa.p - 1];
@@ -426,8 +443,13 @@ export async function openExam(root, id, goBack) {
     return best;
   }
 
+  let lastMark = { k: '', t: 0 };
   function setMark(n, c) {
     if (st.status !== 'running') return;
+    const k = `${n}:${c}`;
+    const now = performance.now();
+    if (lastMark.k === k && now - lastMark.t < 450) return; // 같은 탭의 중복 이벤트
+    lastMark = { k, t: now };
     if (st.marks[n] === c) {
       delete st.marks[n];
       toast(`${n}번 마킹 해제`);
@@ -461,6 +483,11 @@ export async function openExam(root, id, goBack) {
     lctx.clearRect(0, 0, live.width, live.height);
   }
 
+  const hitOf = (el) => {
+    const h = el?.closest?.('.hit');
+    return h ? { n: Number(h.dataset.n), c: Number(h.dataset.c) } : null;
+  };
+
   function startStroke(e, hit) {
     const pg = hit.pg;
     if (!pg.ink || !pg.pdf) return false;
@@ -469,7 +496,7 @@ export async function openExam(root, id, goBack) {
       mode: 'pen', id: e.pointerId, pg,
       stroke: { size: PEN_SIZE, sim: e.pointerType !== 'pen', pts: [] },
       len: 0, t0: performance.now(), x0: e.clientX, y0: e.clientY,
-      downChoice: choiceAt(e.clientX, e.clientY),
+      downChoice: choiceAt(e.clientX, e.clientY) || hitOf(e.target),
       raf: 0, box: null,
     };
     addPoints(e);
@@ -636,13 +663,13 @@ export async function openExam(root, id, goBack) {
     document.activeElement?.blur?.();
     if (e.pointerType === 'touch') {
       if (penNear()) return; // 손바닥
-      if (e.width >= 40 || e.height >= 40) return; // 큰 접촉면 = 손바닥
+      if (e.width >= 90 || e.height >= 90) return; // 아주 큰 접촉면 = 손바닥
       if (e.isPrimary) touches.clear(); // 첫 손가락이면 남아 있던 찌꺼기 제거
       stopInertia();
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 1) {
         const now = performance.now();
-        g = { mode: 'tap', x0: e.clientX, y0: e.clientY, t0: now, lx: e.clientX, ly: e.clientY, lt: now, vx: 0, vy: 0 };
+        g = { mode: 'tap', hit: hitOf(e.target), x0: e.clientX, y0: e.clientY, t0: now, lx: e.clientX, ly: e.clientY, lt: now, vx: 0, vy: 0 };
       } else if (touches.size === 2) {
         const [a, b] = [...touches.values()];
         g = { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: z };
@@ -724,7 +751,7 @@ export async function openExam(root, id, goBack) {
       if (touches.size === 0) {
         const now = performance.now();
         if (g.mode === 'tap' && now - g.t0 < 400 && e.type === 'pointerup' && st.status === 'running') {
-          const c = choiceAt(g.x0, g.y0);
+          const c = g.hit || choiceAt(g.x0, g.y0);
           if (c) setMark(c.n, c.c);
         } else if (g.mode === 'pan' && now - g.lt < 80) startInertia(g.vx, g.vy);
         g = null;
@@ -922,6 +949,8 @@ export async function openExam(root, id, goBack) {
 
   root.querySelector('.exam').addEventListener('click', async (e) => {
     if (e.target === sheet) { sheet.hidden = true; return; } // 바깥을 누르면 닫기
+    const hit = hitOf(e.target);
+    if (hit) return setMark(hit.n, hit.c);
     const mk = e.target.closest('[data-mark]');
     if (mk) {
       const [n, c] = mk.dataset.mark.split(':').map(Number);

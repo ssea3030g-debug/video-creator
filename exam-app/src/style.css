@@ -74,6 +74,9 @@ table.res { width: 100%; border-collapse: collapse; margin-top: 10px; font-size:
 .res tr.ok td:last-child { color: var(--ok); } .res tr.bad { background: #fff1f2; } .res tr.bad td:last-child { color: var(--bad); font-weight: 700; }
 .ring { position: fixed; left: 0; top: 0; border: 1.5px solid #374151; border-radius: 50%; background: rgba(255,255,255,.35); pointer-events: none; z-index: 20; }
 
+.hit { position: absolute; pointer-events: auto; background: transparent; border: 0; padding: 0; margin: 0; min-height: 0; border-radius: 6px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: rgba(37,99,235,.28); user-select: none; -webkit-user-select: none; }
+.hit:active { background: rgba(37,99,235,.14); }
+.scroller.locked .hit { pointer-events: none; }
 .mkr { position: absolute; border-radius: 6px; background: rgba(37,99,235,.09); }
 .mkr.ok { background: rgba(5,150,105,.13); } .mkr.bad { background: rgba(220,38,38,.12); }
 .toast { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(17,24,39,.92); color: #fff; padding: 10px 18px; border-radius: 99px; font-weight: 600; z-index: 30; pointer-events: none; }

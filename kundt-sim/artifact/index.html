@@ -1,0 +1,385 @@
+<title>쿤트관 음속 실험실</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* 레이아웃: 실험 노트처럼 위에 모듈 탭, 아래에 조절 슬라이더 → 그림 → 표 순서 */
+:root{
+  --bg:#f5f7f9; --surface:#ffffff; --fg:#14202b; --muted:#5b6b7a; --line:#d9e0e6;
+  --accent:#0b5cab; --accent-soft:#e3eef9;
+  --c1:#0072B2; --c2:#D55E00; --c3:#009E73; --c4:#B4528A; --c5:#B07A00; --c6:#5b6b7a;
+  --warn:#9a5b00; --warn-bg:#fff4dc;
+  --sans:"Noto Sans KR",system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1419; --surface:#151d25; --fg:#e6edf3; --muted:#93a3b2; --line:#26323d;
+  --accent:#5aa9f0; --accent-soft:#17283a;
+  --c1:#56b0ea; --c2:#f58f45; --c3:#3fd0a2; --c4:#e48fc2; --c5:#e8b43a; --c6:#93a3b2;
+  --warn:#f0b95a; --warn-bg:#2b2310; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1419; --surface:#151d25; --fg:#e6edf3; --muted:#93a3b2; --line:#26323d;
+  --accent:#5aa9f0; --accent-soft:#17283a;
+  --c1:#56b0ea; --c2:#f58f45; --c3:#3fd0a2; --c4:#e48fc2; --c5:#e8b43a; --c6:#93a3b2;
+  --warn:#f0b95a; --warn-bg:#2b2310; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
+.wrap{max-width:1120px;margin:0 auto}
+header{padding:28px 0 14px}
+h1{font-size:clamp(1.5rem,4vw,2.1rem);line-height:1.2;margin:0 0 6px;text-wrap:balance;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0;max-width:68ch}
+.formula{font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:4px;font-size:.92em;white-space:nowrap}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:8px max(16px,env(safe-area-inset-left,0px))}
+.bar-in{max-width:1120px;margin:0 auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.tabs{display:flex;gap:4px;overflow-x:auto;flex:1 1 560px;min-width:0;scrollbar-width:thin}
+.tabs button{font:inherit;font-size:.9rem;white-space:nowrap;background:transparent;color:var(--muted);border:1px solid transparent;border-radius:6px;padding:6px 11px;cursor:pointer}
+.tabs button:hover{color:var(--fg);background:var(--surface)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tabs button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tglobal{display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);flex:0 1 250px}
+.tglobal input{flex:1;min-width:80px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+main{padding-top:22px}
+h2{font-size:1.25rem;margin:0 0 4px}
+.lede{color:var(--muted);margin:0 0 16px;max-width:75ch}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px 22px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:16px}
+.ctl{display:grid;gap:2px;min-width:0}
+.ctl label{font-size:.82rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.ctl output{color:var(--fg);font-family:var(--mono);font-size:.86rem}
+.ctl input[type=range]{width:100%;accent-color:var(--accent)}
+.ctl input[type=number],.ctl select{font:inherit;font-size:.9rem;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:4px 8px;width:100%;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.card h3{font-size:.95rem;margin:0 0 8px;font-weight:700}
+.chart{position:relative;height:340px}
+.chart.tall{height:400px}
+.cap{font-size:.8rem;color:var(--muted);margin:8px 0 0}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:8px 12px;font-size:.86rem;margin:0 0 16px}
+.tw{overflow-x:auto;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.tw h3{font-size:.95rem;margin:0;padding:10px 14px 4px}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{padding:6px 12px;text-align:right;white-space:nowrap;border-top:1px solid var(--line)}
+th{font-weight:500;color:var(--muted);font-size:.8rem;background:transparent}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td:first-child{font-family:var(--sans)}
+td.txt{font-family:var(--sans)}
+tr.hl td{background:var(--accent-soft)}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:.78rem;font-family:var(--sans)}
+.ok{background:color-mix(in srgb,var(--c3) 18%,transparent);color:var(--c3)}
+.mid{background:var(--warn-bg);color:var(--warn)}
+.bad{background:color-mix(in srgb,var(--c2) 18%,transparent);color:var(--c2)}
+.res{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:.92rem}
+.bar2{display:inline-block;height:8px;background:var(--c1);border-radius:2px;vertical-align:middle;margin-right:6px}
+ul.notes{margin:0 0 16px;padding-left:1.2em;color:var(--muted);font-size:.88rem}
+footer{margin-top:28px;border-top:1px solid var(--line);padding-top:14px;color:var(--muted);font-size:.82rem}
+footer b{color:var(--fg)}
+@media (max-width:520px){.chart{height:300px}}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>쿤트관 음속 실험실</h1>
+  <p class="sub">음속으로 기체 분자의 성질과 조성을 알아낸다. 모든 계산은 <span class="formula">v = √(γRT/M)</span> 하나에서 출발합니다. 슬라이더를 움직이면 그림과 표가 바로 바뀝니다.</p>
+</header>
+</div>
+<div class="bar"><div class="bar-in">
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="tglobal"><span>온도</span><input type="range" id="gT" min="0" max="60" step="0.5" value="22" aria-label="기본 온도"><output class="mono" id="gTo">22.0 ℃</output></div>
+</div></div>
+<div class="wrap"><main id="panel"></main>
+<footer>
+  <p><b>이론 계산입니다.</b> 이상기체 모형이며 실측은 비교용으로만 표시하고 계산에 되먹이지 않습니다. 이론과 실측의 차이는 그대로 보입니다.</p>
+  <p><b>가정한 값</b>: 관 길이·반지름, 상대습도, 읽기 오차, 투과 계수 k, 시작 CO₂ 비율은 모두 슬라이더로 바꿀 수 있는 가정값이며 측정값이 아닙니다. 실험 2의 온도 "약 50℃"는 50.0℃로 두었습니다.</p>
+  <p><b>기체 데이터</b>: 분자량·Cp·분자 구조는 사용자가 준 값입니다. NIST Chemistry WebBook이나 CRC Handbook과 대조해 확인하세요. 같은 모형의 Python 스크립트는 저장소의 <span class="mono">kundt-sim/kundt_sim.py</span>에 있습니다.</p>
+</footer></div>
+
+<script>
+/* ===== 상수와 데이터 (Python 스크립트와 동일) ===== */
+const R=8.314, P_ATM=101325, NA=6.02214076e23;
+const G={
+  He:{M:4.003,Cp:20.79,kind:'단원자',shape:'단원자',lab:'He'},
+  Ne:{M:20.18,Cp:20.79,kind:'단원자',shape:'단원자',lab:'Ne'},
+  Ar:{M:39.95,Cp:20.79,kind:'단원자',shape:'단원자',lab:'Ar'},
+  H2:{M:2.016,Cp:28.8,kind:'이원자',shape:'이원자',lab:'H₂'},
+  N2:{M:28.014,Cp:29.1,kind:'이원자',shape:'이원자',lab:'N₂'},
+  O2:{M:31.999,Cp:29.4,kind:'이원자',shape:'이원자',lab:'O₂'},
+  CO2:{M:44.01,Cp:37.1,kind:'다원자',shape:'선형 삼원자',lab:'CO₂'},
+  H2O:{M:18.015,Cp:33.6,kind:'다원자',shape:'굽은 삼원자',lab:'H₂O'},
+  CH4:{M:16.04,Cp:35.7,kind:'다원자',shape:'정사면체',lab:'CH₄'},
+  NH3:{M:17.03,Cp:35.1,kind:'다원자',shape:'삼각뿔',lab:'NH₃'},
+  SF6:{M:146.06,Cp:97.0,kind:'다원자',shape:'정팔면체',lab:'SF₆'}};
+const AIR_PCT={N2:78.08,O2:20.95,Ar:0.93,CO2:0.04};
+const COMP={}; for(const k in G)COMP[k]={M:G[k].M/1000,Cp:G[k].Cp};
+{const tot=Object.values(AIR_PCT).reduce((a,b)=>a+b,0);let M=0,Cp=0;
+ for(const k in AIR_PCT){const x=AIR_PCT[k]/tot;M+=x*COMP[k].M;Cp+=x*COMP[k].Cp}
+ COMP.AIR={M,Cp};}
+const LAB={AIR:'공기',...Object.fromEntries(Object.keys(G).map(k=>[k,G[k].lab]))};
+const EXP1=[24.1,345], EXP2=[50,360], RUNS=[267,270,276], MEAN3=271, SENSOR=0.9, AIR_REF=345;
+const PAIRS=[['AIR','CO2'],['AIR','He'],['AIR','SF6'],['CH4','CO2']];
+const FREE_R0=2; // cm, 1/r 곡선의 기준 거리(규격화)
+
+/* ===== 공통 함수 ===== */
+const K=tc=>tc+273.15;
+function mix(keys,xs){let M=0,Cp=0;keys.forEach((k,i)=>{M+=xs[i]*COMP[k].M;Cp+=xs[i]*COMP[k].Cp});return{M,Cp,g:Cp/(Cp-R)}}
+const vs=(M,g,T)=>Math.sqrt(g*R*T/M);
+function vb(a,b,x,T){const m=mix([a,b],[1-x,x]);return vs(m.M,m.g,T)}
+function vp(k,T){const m=mix([k],[1]);return vs(m.M,m.g,T)}
+function inv(v,a,b,T){ // 구간 이분법. 범위 밖이면 끝으로 자르고 표시
+  const va=vb(a,b,0,T),vbb=vb(a,b,1,T),inc=vbb>va;
+  if(v<Math.min(va,vbb))return{x:inc?0:1,st:'범위 밖(이론 최소 미만)',ok:false};
+  if(v>Math.max(va,vbb))return{x:inc?1:0,st:'범위 밖(이론 최대 초과)',ok:false};
+  let lo=0,hi=1;while(hi-lo>1e-10){const mid=(lo+hi)/2;((vb(a,b,mid,T)<v)===inc)?lo=mid:hi=mid}
+  return{x:(lo+hi)/2,st:'정상',ok:true};}
+const psat=tc=>611.2*Math.exp(17.62*tc/(243.12+tc));
+function humid(tc,rh){const xw=rh*psat(tc)/P_ATM;const m=mix(['AIR','H2O'],[1-xw,xw]);return{v:vs(m.M,m.g,K(tc)),M:m.M,g:m.g,xw}}
+const range=(a,b,n)=>Array.from({length:n+1},(_,i)=>a+(b-a)*i/n);
+const f=(x,d=1)=>Number(x).toFixed(d);
+const sg=(x,d=1)=>(x>=0?'+':'−')+Math.abs(x).toFixed(d);
+
+/* ===== 차트 도구 ===== */
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const charts={};
+const labelPlugin={id:'lbl',afterDatasetsDraw(ch){const ctx=ch.ctx;
+  ch.data.datasets.forEach((ds,i)=>{if(!ds.labels)return;const meta=ch.getDatasetMeta(i);if(meta.hidden)return;
+    meta.data.forEach((pt,j)=>{const l=ds.labels[j];if(!l)return;const o=(ds.offs&&ds.offs[j])||[8,-7,'left'];
+      ctx.save();ctx.fillStyle=css('--fg');ctx.font='12px '+css('--sans');ctx.textAlign=o[2]||'left';ctx.fillText(l,pt.x+o[0],pt.y+o[1]);ctx.restore()})})}};
+Chart.register(labelPlugin);
+const C=n=>css('--c'+n);
+function line(label,data,color,o={}){return{label,data,showLine:true,borderColor:color,backgroundColor:color,borderWidth:1.6,pointRadius:0,pointStyle:'line',tension:0,...o}}
+function pts(label,data,color,style='circle',o={}){return{label,data,showLine:false,borderColor:color,backgroundColor:css('--surface'),borderWidth:1.8,pointRadius:6,pointHoverRadius:7,pointStyle:style,...o}}
+function draw(id,datasets,{xt,yt,xmin,xmax,ymin,ymax,xlog,ylog,ticks,legend='bottom',xticks}={}){
+  const el=document.getElementById(id);if(!el)return;
+  if(charts[id])charts[id].destroy();
+  const mut=css('--muted'),grid=css('--line');
+  const ax=(t,mn,mx,lg,tk)=>({type:lg?'logarithmic':'linear',min:mn,max:mx,title:{display:!!t,text:t,color:mut},
+    grid:{color:grid},border:{color:grid},ticks:{color:mut,...(tk?{callback:v=>tk.some(t=>Math.abs(t-v)<=t*1e-6)?v:''}:{}),maxTicksLimit:9}});
+  charts[id]=new Chart(el,{type:'scatter',data:{datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,
+    interaction:{mode:'nearest',intersect:true},
+    plugins:{legend:legend?{position:legend,labels:{usePointStyle:true,color:css('--fg'),boxWidth:26,boxHeight:8,font:{size:11.5},
+      filter:i=>!datasets[i.datasetIndex].hideLegend}}:{display:false},
+      tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${f(c.parsed.x,2)}, ${f(c.parsed.y,2)}`}}},
+    scales:{x:ax(xt,xmin,xmax,xlog,xticks),y:ax(yt,ymin,ymax,ylog,ticks)}}});
+}
+const clipLine=(x1,y1,x2,y2,label,color,dash)=>line(label,[{x:x1,y:y1},{x:x2,y:y2}],color,{borderDash:dash,borderWidth:1.2});
+
+/* ===== 표 ===== */
+function tbl(title,heads,rows,hl){return`<div class="tw">${title?`<h3>${title}</h3>`:''}<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${
+  rows.map((r,i)=>`<tr${hl===i?' class="hl"':''}>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`}
+const pill=(t,c)=>`<span class="pill ${c}">${t}</span>`;
+
+/* ===== 상태와 컨트롤 ===== */
+const S={T:22,err:2,f3:1000,rhT:22,rhA:40,rhB:80,dcm:0.1,fh:1000,k1:0.30,k2:0.02,x0:100,L:30,r:2,v6:345,f6:1000,
+  invV:271,invPair:0,incHe:1};
+const ctl=(k,label,min,max,step,fmt=v=>f(v,2))=>`<div class="ctl"><label for="c_${k}">${label}<output id="o_${k}">${fmt(S[k])}</output></label><input type="range" id="c_${k}" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${S[k]}"></div>`;
+const fm={};
+const bindFmt=(k,fn)=>{fm[k]=fn};
+const el=id=>document.getElementById(id);
+const set=(id,h)=>{const e=el(id);if(e)e.innerHTML=h};
+const T0=()=>K(S.T);
+
+/* ===== 모듈 0: 보고서 그림 재현 ===== */
+const M0={tab:'0 보고서 그림',
+  html:()=>`<h2>보고서 그림 재현</h2><p class="lede">공기에 CO₂를 섞을 때의 이론 음속 곡선 위에 센서 표시와 실험 3의 실측을 겹쳤습니다. 센서는 0.9%를 가리켰지만 측정 음속은 곡선의 오른쪽 끝 근처에 있습니다.</p>
+   <p class="note">보고서 값은 22.0℃ 기준입니다. 위 온도 슬라이더를 22.0으로 두면 보고서와 같은 값이 나옵니다.</p>
+   <div class="card"><h3>공기 + CO₂ 이론 음속과 실험 3</h3><div class="chart tall"><canvas id="ch0"></canvas></div></div>
+   <div id="t0"></div>`,
+  update(){const T=T0();
+    const cur=range(0,100,200).map(x=>({x,y:vb('AIR','CO2',x/100,T)}));
+    draw('ch0',[line('이론 음속 (공기 + CO₂)',cur,C(1),{borderWidth:1.6}),
+      clipLine(SENSOR,250,SENSOR,365,'센서 표시 0.9%',C(6),[5,4]),
+      clipLine(0,MEAN3,100,MEAN3,'실험 3 평균 271 m/s',C(3),[8,3,2,3]),
+      pts('1회차 267 m/s',[{x:SENSOR,y:RUNS[0]}],C(2),'circle'),pts('2회차 270 m/s',[{x:SENSOR,y:RUNS[1]}],C(2),'rect'),
+      pts('3회차 276 m/s',[{x:SENSOR,y:RUNS[2]}],C(2),'triangle'),
+      pts('0.9%에서의 이론값',[{x:SENSOR,y:vb('AIR','CO2',SENSOR/100,T)}],css('--fg'),'rectRot',{backgroundColor:css('--fg'),pointRadius:4.5})],
+      {xt:'CO₂ 비율 (%)',yt:'음속 (m/s)',xmin:0,xmax:100,ymin:255,ymax:360});
+    const va=vb('AIR','CO2',0,T),vc=vb('AIR','CO2',1,T),v09=vb('AIR','CO2',SENSOR/100,T);
+    const mean=inv(MEAN3,'AIR','CO2',T);
+    const rows=[['순수 공기 이론 음속',f(va,2)+' m/s'],['순수 CO₂ 이론 음속',f(vc,2)+' m/s'],
+      ['0.9%에서 이론 음속',f(v09,2)+' m/s'],['0.9%의 공기 대비 차이',sg((v09/va-1)*100,2)+' %'],
+      ['271 m/s 역산 CO₂ 비율 (평균)',f(mean.x*100,1)+' %  '+(mean.ok?'':pill(mean.st,'mid'))]];
+    RUNS.forEach((v,i)=>{const r=inv(v,'AIR','CO2',T);rows.push([`${v} m/s (${i+1}회차) 역산 CO₂ 비율`,f(r.x*100,1)+' %  '+(r.ok?'':pill(r.st+' → 100%로 잘림','mid'))])});
+    set('t0',tbl('그림 아래 값 ('+f(S.T,1)+'℃)',['항목','값'],rows)+
+      '<p class="cap">순수 CO₂의 이론 음속보다 느린 측정값은 100%로 잘라 "범위 밖"으로 표시합니다. 이론을 실측에 맞추려고 상수를 조정하지 않았습니다.</p>')}};
+
+/* ===== 모듈 1: 분자량과 분자 구조 ===== */
+const OFF={CH4:[-8,-7,'right'],Ne:[8,-7,'left'],NH3:[-8,15,'right'],H2O:[8,16,'left'],N2:[-9,-7,'right'],O2:[8,15,'left']};
+function gasRow(k,T){const m=mix([k],[1]);const g=m.g,vM=Math.sqrt(R*T/m.M),v=vs(m.M,g,T);return{k,M:m.M*1000,Cp:m.Cp,g,f:2/(g-1),vM,v}}
+const M1={tab:'1 분자량·구조',
+  html:()=>`<h2>왜 기체마다 음속이 다른가</h2><p class="lede">음속은 분자가 무거울수록 느리고(M), 에너지를 병진 운동 밖으로 숨기는 자유도가 많을수록 느립니다(γ). 두 효과를 따로 떼어 비교합니다.</p>
+   <div class="card"><h3>분자량(로그) 대 음속 — 회색 선이 분자 구조의 효과</h3><div class="chart tall"><canvas id="ch1"></canvas></div>
+   <p class="cap">빈 원은 분자량만 쓴 √(RT/M), 채운 마커는 γ까지 쓴 √(γRT/M). H₂O는 이 온도·압력에서 순수 증기로 존재할 수 없는 가상값입니다.</p></div>
+   <div id="t1"></div>`,
+  update(){const T=T0();const rows=Object.keys(G).map(k=>gasRow(k,T));
+    const conn=[];rows.forEach(r=>{conn.push({x:r.M,y:r.vM},{x:r.M,y:r.v},{x:r.M,y:null})});
+    const kinds=[['단원자',C(1),'circle'],['이원자',C(2),'rect'],['다원자',C(3),'triangle']];
+    const air=gasRow('AIR',T);
+    const ds=[line('구조 효과(연결선)',conn,css('--line'),{borderWidth:1,hideLegend:true,spanGaps:false,borderColor:css('--muted')}),
+      pts('분자량만 √(RT/M)',rows.map(r=>({x:r.M,y:r.vM})),C(6),'circle',{pointRadius:3.5,borderWidth:1.2})];
+    kinds.forEach(([kd,c,st])=>{const s=rows.filter(r=>G[r.k].kind===kd);
+      ds.push(pts(kd+': γ까지 √(γRT/M)',s.map(r=>({x:r.M,y:r.v})),c,st,{backgroundColor:c,pointRadius:6,labels:s.map(r=>G[r.k].lab),offs:s.map(r=>OFF[r.k])}))});
+    ds.push(pts('공기(혼합)',[{x:air.M,y:air.v}],css('--fg'),'rectRot',{backgroundColor:css('--fg'),pointRadius:4.5,labels:['공기'],offs:[[10,-9,'left']]}));
+    draw('ch1',ds,{xt:'분자량 M (g/mol, 로그 축)',yt:'음속 (m/s, 로그 축)',xlog:1,ylog:1,xmin:1.5,xmax:250,ymin:90,ymax:2200,ticks:[100,200,300,500,1000,2000],xticks:[2,5,10,20,50,100,200]});
+    const all=[air,...rows];
+    const tr=all.map(r=>{const name=r.k==='AIR'?'공기(혼합)':LAB[r.k];const shape=r.k==='AIR'?'혼합(이원자 위주)':G[r.k].shape;
+      return[name,`<span class="txt" style="font-family:var(--sans)">${shape}</span>`,f(r.M,2),f(r.Cp,2),f(r.g,3),f(r.f,2),f(r.vM,1),f(r.v,1),f(r.v/r.vM,3),f(r.vM/air.vM,3),f(r.v/air.v,3)]});
+    const co2=gasRow('CO2',T);
+    set('t1',tbl(`순수 기체 음속 (${f(S.T,1)}℃)`,['기체','분자 구조','M (g/mol)','Cp','γ','자유도 f','√(RT/M) m/s','√(γRT/M) m/s','구조 효과 √γ','공기 대비 (M만)','공기 대비 (γ까지)'],tr)+
+      tbl('CO₂의 공기 대비 음속비',['방법','음속비'],[['분자량만 √(M공기/M CO₂)',f(co2.vM/air.vM,4)],['γ까지 (이론 v CO₂/v 공기)',f(co2.v/air.v,4)],['실측 271/345 (비교용)',f(MEAN3/AIR_REF,4)]])+
+      '<p class="cap">자유도 f는 γ = 1 + 2/f에서 역산한 유효값입니다. 상온에서는 진동 자유도가 일부만 열려 다원자 분자의 f가 정수가 되지 않습니다.</p>')}};
+
+/* ===== 모듈 2: 혼합 기체 조성 분석 ===== */
+const M2={tab:'2 조성 역산',
+  html:()=>`<h2>음속에서 조성을 거꾸로 구하기</h2><p class="lede">두 성분의 음속 차이가 클수록 곡선이 가팔라서, 같은 측정 오차가 만드는 조성 오차가 작아집니다.</p>
+   <div class="controls">${ctl('err','음속 측정 오차 ±(m/s)',0.5,6,0.5,v=>'±'+f(v,1))}
+     <div class="ctl"><label for="invPair">역산할 성분 쌍</label><select id="invPair">${PAIRS.map((p,i)=>`<option value="${i}">${LAB[p[0]]} + ${LAB[p[1]]}</option>`).join('')}</select></div>
+     <div class="ctl"><label for="invV">측정 음속 (m/s)</label><input type="number" id="invV" step="0.5" value="${S.invV}"></div>
+     <div class="ctl"><label for="incHe">그림 범위</label><select id="incHe"><option value="1">He 포함 (전체)</option><option value="0">He 제외 (확대)</option></select></div></div>
+   <div class="res" id="r2"></div>
+   <div class="card"><h3>몰분율–음속 곡선 비교</h3><div class="chart tall"><canvas id="ch2"></canvas></div><p class="cap">가로축은 두 번째 성분의 몰분율입니다. 선 모양과 마커로도 구분했습니다.</p></div>
+   <div id="t2"></div>`,
+  init(){const sel=el('invPair'),v=el('invV'),h=el('incHe');sel.value=S.invPair;h.value=S.incHe;
+    sel.onchange=()=>{S.invPair=+sel.value;M2.update()};v.oninput=()=>{S.invV=+v.value;M2.update()};h.onchange=()=>{S.incHe=+h.value;M2.update()}},
+  update(){const T=T0();const st=[['-',[]],['--',[6,4]],['-.',[8,3,2,3]],[':',[2,3]]],mk=['circle','rect','triangle','rectRot'],cc=[C(1),C(2),C(3),C(4)];
+    const ds=[];PAIRS.forEach((p,i)=>{if(!S.incHe&&p[1]==='He')return;
+      ds.push(line(`${LAB[p[0]]} + ${LAB[p[1]]}`,range(0,100,100).map(x=>({x,y:vb(p[0],p[1],x/100,T)})),cc[i],{borderDash:st[i][1],pointStyle:mk[i],pointRadius:3.5,backgroundColor:css('--surface'),borderWidth:1.6}))});
+    draw('ch2',ds,{xt:'둘째 성분의 몰분율 (%)',yt:'음속 (m/s)',xmin:0,xmax:100,ymin:S.incHe?0:100,ymax:S.incHe?1100:480});
+    // 역산기
+    const p=PAIRS[S.invPair],r=inv(S.invV,p[0],p[1],T),lo=inv(S.invV+S.err,p[0],p[1],T),hi=inv(S.invV-S.err,p[0],p[1],T);
+    set('r2',`<b>${LAB[p[0]]} + ${LAB[p[1]]}</b>에서 ${f(S.invV,1)} m/s → ${LAB[p[1]]} <b class="mono">${f(r.x*100,1)} %</b> ${r.ok?'':pill(r.st,'mid')}
+      <span style="color:var(--muted)"> (±${f(S.err,1)} m/s이면 ${f(Math.min(lo.x,hi.x)*100,1)} ~ ${f(Math.max(lo.x,hi.x)*100,1)} %)</span>`);
+    // 오차 표
+    const rows=PAIRS.map(p=>{const a=vb(p[0],p[1],0,T),b=vb(p[0],p[1],1,T);let warn=[];
+      const e=[.1,.5,.9].map(x=>{const v0=vb(p[0],p[1],x,T),u=inv(v0+S.err,p[0],p[1],T),d=inv(v0-S.err,p[0],p[1],T);if(!u.ok||!d.ok)warn.push(Math.round(x*100)+'%');return Math.abs(u.x-d.x)/2*100});
+      return{n:`${LAB[p[0]]}+${LAB[p[1]]}`,a,b,dv:Math.abs(b-a),e,warn}}).sort((x,y)=>y.dv-x.dv);
+    const tr=rows.map(r=>[r.n,f(r.a,1),f(r.b,1),f(r.dv,1),...r.e.map(v=>f(v,2)),r.warn.length?pill('잘림 '+r.warn.join(','),'mid'):'-']);
+    const runs=[...RUNS.map((v,i)=>[`${i+1}회차`,v]),['평균',MEAN3]].map(([n,v])=>{const q=inv(v,'AIR','CO2',T),l=inv(v+S.err,'AIR','CO2',T),h=inv(v-S.err,'AIR','CO2',T);
+      return[n,f(v,0),f(q.x*100,1),q.ok?pill('정상','ok'):pill(q.st,'mid'),f(l.x*100,1),f(h.x*100,1)]});
+    set('t2',tbl(`측정 오차 ±${f(S.err,1)} m/s가 만드는 조성 오차 (±%p)`,['성분 쌍','v 첫째','v 둘째','|Δv| m/s','x=10%','x=50%','x=90%','범위'],tr)+
+      '<p class="cap">|Δv|가 큰 순서입니다. SF₆+공기와 CH₄+CO₂는 |Δv|가 비슷하고 곡선이 비선형이라 x에 따라 순위가 바뀝니다. 오차는 |Δv|뿐 아니라 그 조성에서의 기울기에 반비례합니다.</p>'+
+      tbl('실험 3 측정 음속 → CO₂ 비율 (공기 + CO₂)',['회차','음속 m/s','CO₂ %','상태','하한 %','상한 %'],runs))}};
+
+/* ===== 모듈 3: 온도 ===== */
+const M3={tab:'3 온도',
+  html:()=>`<h2>온도가 음속에 미치는 영향</h2><p class="lede">음속은 √T에 비례하고, 분자 평균 속력도 √T에 비례합니다. 그래서 둘의 비는 온도와 무관하게 일정합니다.</p>
+   <div class="controls">${ctl('f3','스피커 주파수 f (Hz)',300,3000,50,v=>f(v,0)+' Hz')}</div>
+   <div class="grid"><div class="card"><h3>(a) 온도에 따른 음속</h3><div class="chart"><canvas id="ch3a"></canvas></div></div>
+   <div class="card"><h3>(b) 공기 확대: 정확한 식, 선형 근사, 실측</h3><div class="chart"><canvas id="ch3b"></canvas></div></div>
+   <div class="card"><h3>(c) 마디 간격 v/(2f)</h3><div class="chart"><canvas id="ch3c"></canvas></div></div>
+   <div class="card"><h3>(d) 분자 평균 속력과 음속</h3><div class="chart"><canvas id="ch3d"></canvas></div></div></div>
+   <p class="cap" style="margin:-4px 0 16px">실험 2의 온도는 "약 50℃"를 50.0℃로 가정했습니다. 실측은 비교용입니다.</p><div id="t3"></div>`,
+  update(){const Ts=range(0,60,120),mp=(k)=>Ts.map(t=>({x:t,y:vp(k,K(t))}));
+    draw('ch3a',[line('He',mp('He'),C(2),{borderDash:[6,4]}),line('공기',Ts.map(t=>({x:t,y:vp('AIR',K(t))})),C(1)),line('CO₂',mp('CO2'),C(3),{borderDash:[8,3,2,3]})],{xt:'온도 (℃)',yt:'음속 (m/s)',ymin:200,ymax:1150});
+    draw('ch3b',[line('정확한 √ 식',Ts.map(t=>({x:t,y:vp('AIR',K(t))})),C(1)),line('선형 근사 331.3 + 0.606·T',Ts.map(t=>({x:t,y:331.3+0.606*t})),C(5),{borderDash:[6,4]}),
+      pts('실험 1 (24.1℃, 345 m/s)',[{x:EXP1[0],y:EXP1[1]}],C(2),'circle'),pts('실험 2 (약 50℃, 360 m/s)',[{x:EXP2[0],y:EXP2[1]}],C(2),'rect')],{xt:'온도 (℃)',yt:'음속 (m/s)',ymin:325,ymax:385});
+    const ns=k=>Ts.map(t=>({x:t,y:vp(k,K(t))/(2*S.f3)*100}));
+    draw('ch3c',[line('He',ns('He'),C(2),{borderDash:[6,4]}),line('공기',ns('AIR'),C(1)),line('CO₂',ns('CO2'),C(3),{borderDash:[8,3,2,3]})],{xt:'온도 (℃)',yt:'마디 간격 (cm)',ymin:0});
+    const rms=k=>Ts.map(t=>({x:t,y:Math.sqrt(3*R*K(t)/COMP[k].M)}));
+    draw('ch3d',[line('공기 평균 제곱근 속력',rms('AIR'),C(1),{pointStyle:'circle',pointRadius:0}),line('공기 음속',Ts.map(t=>({x:t,y:vp('AIR',K(t))})),C(1),{borderDash:[6,4]}),
+      line('CO₂ 평균 제곱근 속력',rms('CO2'),C(3)),line('CO₂ 음속',mp('CO2'),C(3),{borderDash:[6,4]})],{xt:'온도 (℃)',yt:'속력 (m/s)',ymin:150,ymax:600});
+    const tt=[0,10,20,22,30,40,50,60].map(tc=>{const ve=vp('AIR',K(tc)),vl=331.3+0.606*tc,vc=vp('CO2',K(tc)),vh=vp('He',K(tc));
+      return[tc,f(ve,3),f(vl,3),sg(vl-ve,3),sg((vl/ve-1)*100,3),f(vc,1),f(vh,1),f(ve/(2*S.f3)*100,2),f(vc/(2*S.f3)*100,2),f(vh/(2*S.f3)*100,2)]});
+    const ex=[['실험 1',...EXP1],['실험 2',...EXP2]].map(([n,tc,vm])=>{const vt=vp('AIR',K(tc));return[n,f(tc,1),f(vm,0),f(vt,2),sg(vm-vt,2),sg((vm/vt-1)*100,2),f(331.3+0.606*tc,2)]});
+    const kin=[];[0,22,50,60].forEach(tc=>['AIR','CO2'].forEach(k=>{const m=mix([k],[1]),T=K(tc),vr=Math.sqrt(3*R*T/m.M),v=vs(m.M,m.g,T);
+      kin.push([tc,LAB[k],f(1.5*R/NA*T*1e21,3),f(vr,1),f(v,1),f(vr/v,4),f(Math.sqrt(3/m.g),4)])}));
+    const t1=K(22),t2=K(50);
+    set('t3',tbl('온도별 음속, 선형 근사와의 차이, 마디 간격 (f = '+f(S.f3,0)+' Hz)',['T ℃','공기 정확','선형 근사','근사−정확','차이 %','CO₂','He','간격 공기 cm','간격 CO₂ cm','간격 He cm'],tt)+
+      tbl('실측과 이론 (공기)',['실험','T ℃','실측 m/s','이론 m/s','실측−이론','차이 %','선형 근사'],ex)+
+      tbl('온도 상승과 분자 운동 (병진 운동에너지 = 3/2·kT)',['T ℃','기체','운동에너지/분자 (10⁻²¹ J)','v_rms m/s','음속 m/s','v_rms/음속','√(3/γ)'],kin)+
+      `<div class="res">22℃ → 50℃: 분자 평균 운동에너지 <b class="mono">+${f((t2/t1-1)*100,1)}%</b> (∝ T), 분자 평균 속력과 음속 <b class="mono">+${f((Math.sqrt(t2/t1)-1)*100,1)}%</b> (∝ √T).</div>`)}};
+
+/* ===== 모듈 4: 습도 ===== */
+const M4={tab:'4 습도',
+  html:()=>`<h2>습도를 무시해도 되는가</h2><p class="lede">수증기(M 18)는 공기(M 28.97)보다 가볍습니다. 섞이면 평균 분자량이 줄어 음속이 빨라집니다. 수증기의 γ가 더 작은 효과는 분자량 효과보다 훨씬 작습니다.</p>
+   <div class="controls">${ctl('rhT','온도 (℃)',10,40,0.5,v=>f(v,1)+' ℃')}${ctl('rhA','습도 변화 시작 RH (%)',0,100,5,v=>f(v,0)+' %')}${ctl('rhB','습도 변화 끝 RH (%)',0,100,5,v=>f(v,0)+' %')}
+     ${ctl('dcm','마디 간격 읽기 오차 (cm)',0.05,0.5,0.05,v=>f(v,2)+' cm')}${ctl('fh','주파수 f (Hz)',500,2000,50,v=>f(v,0)+' Hz')}</div>
+   <div class="grid"><div class="card"><h3>(a) 상대습도에 따른 음속</h3><div class="chart"><canvas id="ch4a"></canvas></div></div>
+   <div class="card"><h3>(b) 온도·습도별 음속</h3><div class="chart"><canvas id="ch4b"></canvas></div></div>
+   <div class="card"><h3>(c) 습도 변화 효과와 읽기 오차</h3><div class="chart"><canvas id="ch4c"></canvas></div></div></div>
+   <div class="res" id="r4"></div><div id="t4"></div>`,
+  update(){const thr=2*S.fh*S.dcm/100,lo=S.rhA/100,hi=S.rhB/100;
+    draw('ch4a',[line(`${f(S.rhT,1)}℃`,range(0,100,50).map(r=>({x:r,y:humid(S.rhT,r/100).v})),C(1))],{xt:'상대습도 RH (%)',yt:'음속 (m/s)',legend:null});
+    const Ts=range(10,40,60),st=[[[],'circle',C(1)],[[6,4],'rect',C(5)],[[8,3,2,3],'triangle',C(3)]];
+    draw('ch4b',[0,.5,1].map((rh,i)=>line(`RH ${rh*100}%`,Ts.map(t=>({x:t,y:humid(t,rh).v})),st[i][2],{borderDash:st[i][0]})),{xt:'온도 (℃)',yt:'음속 (m/s)'});
+    draw('ch4c',[line(`RH ${S.rhA}% → ${S.rhB}%에 의한 음속 변화`,Ts.map(t=>({x:t,y:humid(t,hi).v-humid(t,lo).v})),C(1)),
+      clipLine(10,thr,40,thr,`읽기 오차 ${f(S.dcm,2)} cm ≈ ${f(thr,1)} m/s`,C(2),[6,4])],{xt:'온도 (℃)',yt:'Δ음속 (m/s)',ymin:0});
+    const h0=humid(S.rhT,0);
+    const d=humid(S.rhT,hi).v-humid(S.rhT,lo).v;
+    set('r4',`${f(S.rhT,1)}℃에서 습도 ${S.rhA}% → ${S.rhB}%는 음속을 <b class="mono">${sg(d,2)} m/s (${sg(d/humid(S.rhT,lo).v*100,2)}%)</b> 바꿉니다. 마디 간격으로는 ${f(d/(2*S.fh)*100,3)} cm이고, 읽기 오차 ${f(thr,1)} m/s의 ${f(d/thr,2)}배입니다.`);
+    const judge=dv=>dv<0.5*thr?pill('무시 가능','ok'):dv<thr?pill('경계(오차의 절반 이상)','mid'):pill('무시 불가(보정 필요)','bad');
+    const rows=[10,22,30,40].map(tc=>{const v1=humid(tc,lo).v,v2=humid(tc,hi).v,dv=v2-v1;return[tc,f(v1,3),f(v2,3),f(dv,3),f(dv/v1*100,3),f(dv/(2*S.fh)*100,3),f(thr,2),f(dv/thr,2),judge(dv)]});
+    const scan=range(0,1,10).map(rh=>{const h=humid(S.rhT,rh);return[f(rh*100,0),f(h.xw*100,3),f(h.M*1000,3),f(h.g,4),f(h.v,3),sg(h.v-h0.v,3),sg((Math.sqrt(h0.M/h.M)-1)*100,3),sg((Math.sqrt(h.g/h0.g)-1)*100,3)]});
+    set('t4',tbl(`습도 ${S.rhA}% → ${S.rhB}% 변화는 무시해도 되는가 (f = ${f(S.fh,0)} Hz, 읽기 오차 ${f(S.dcm,2)} cm)`,['T ℃',`v @RH${S.rhA}%`,`v @RH${S.rhB}%`,'Δv m/s','Δv %','Δ마디 간격 cm','읽기 오차 m/s','Δv/오차','판단'],rows)+
+      '<p class="cap">판단 기준(가정): Δv가 읽기 오차의 절반 미만이면 무시 가능, 1배 미만이면 경계, 그 이상이면 보정 필요.</p>'+
+      tbl(`${f(S.rhT,1)}℃, 상대습도별 음속과 두 효과의 분해`,['RH %','수증기 x_w %','M g/mol','γ','음속 m/s','건조 대비 m/s','분자량 효과 %','γ 효과 %'],scan))}};
+
+/* ===== 모듈 5: 기체 투과 ===== */
+const M5={tab:'5 투과',
+  html:()=>`<h2>관 속 조성은 얼마나 유지되는가</h2><p class="lede">그레이엄 법칙의 속도비와, 투과로 CO₂가 빠져나갈 때 이론 음속이 어떻게 변하는지 봅니다.</p>
+   <p class="note">투과 계수 k와 시작 CO₂ 비율은 임의로 가정한 값이며 측정값이 아닙니다. 슬라이더로 바꿔 보는 용도입니다.</p>
+   <div class="controls">${ctl('k1','k: 스펀지·거즈 (큼, 가정) /min',0.02,1,0.02,v=>f(v,2))}${ctl('k2','k: 투과성 낮은 소재 (작음, 가정) /min',0.005,0.2,0.005,v=>f(v,3))}${ctl('x0','시작 CO₂ 비율 (가정) %',50,100,1,v=>f(v,0)+' %')}</div>
+   <div class="grid"><div class="card"><h3>(a) 관 속 CO₂ 비율 x(t) = x₀·exp(−k·t)</h3><div class="chart"><canvas id="ch5a"></canvas></div></div>
+   <div class="card"><h3>(b) CO₂가 빠져나가면 음속이 빨라진다</h3><div class="chart"><canvas id="ch5b"></canvas></div></div></div>
+   <p class="cap" style="margin:-4px 0 16px">k는 임의 가정값이며 측정값이 아닙니다. 점선은 측정에 걸리는 시간 1분과 3분입니다.</p>
+   <div id="t5"></div>`,
+  update(){const T=T0(),x0=S.x0/100,t=range(0,5,100);const mats=[['스펀지·거즈 (k 큼, 가정)',S.k1,C(1),[],'circle'],['투과성 낮은 소재 (k 작음, 가정)',S.k2,C(2),[6,4],'rect']];
+    draw('ch5a',[...mats.map(m=>line(`${m[0]}, k=${f(m[1],3)}/min`,t.map(s=>({x:s,y:x0*Math.exp(-m[1]*s)*100})),m[2],{borderDash:m[3]})),
+      clipLine(1,0,1,105,'1분',C(6),[2,3]),clipLine(3,0,3,105,'3분',C(6),[2,3])].map((d,i)=>i>=2?{...d,hideLegend:true}:d),{xt:'시간 t (분)',yt:'관 속 CO₂ 비율 (%)',ymin:0,ymax:105});
+    draw('ch5b',[...mats.map(m=>line(m[0],t.map(s=>({x:s,y:vb('AIR','CO2',x0*Math.exp(-m[1]*s),T)})),m[2],{borderDash:m[3]})),
+      clipLine(1,250,1,340,'1분',C(6),[2,3]),clipLine(3,250,3,340,'3분',C(6),[2,3])].map((d,i)=>i>=2?{...d,hideLegend:true}:d),{xt:'시간 t (분)',yt:'이론 음속 (m/s)'});
+    const gp=[['CO2','AIR'],['CO2','N2'],['CO2','O2'],['He','AIR']],gr=gp.map(([a,b])=>{const r=Math.sqrt(COMP[b].M/COMP[a].M);
+      return[`${LAB[a]} 대 ${LAB[b]}`,f(COMP[a].M*1000,2),f(COMP[b].M*1000,2),`<span class="bar2" style="width:${Math.round(r*40)}px"></span>${f(r,3)}`]});
+    const v0=vb('AIR','CO2',x0,T),thr=2;
+    const kin=mats.map(m=>{const x1=x0*Math.exp(-m[1]),x3=x0*Math.exp(-3*m[1]),v1=vb('AIR','CO2',x1,T),v3=vb('AIR','CO2',x3,T);
+      return[m[0],f(m[1],3),f(x1*100,1),f(x3*100,1),f(v0,1),f(v1,1),f(v3,1),sg(v1-v0,1),sg(v3-v0,1),v3-v0>thr?pill('조성 변화 무시 불가','bad'):pill('오차 수준','ok')]});
+    set('t5',tbl('측정 시간 동안 음속 변화 (k는 가정값)',['소재 (가정)','k /min','x(1분) %','x(3분) %','v(0) m/s','v(1분)','v(3분)','Δv 0→1분','Δv 0→3분','2 m/s 기준'],kin)+
+      '<p class="cap">기준 2 m/s는 마디 간격 읽기 오차 0.1 cm(f = 1000 Hz)에 해당합니다.</p>'+
+      tbl('그레이엄 법칙: 같은 조건에서 유출·투과 속도비 A/B = √(M_B/M_A)',['비교','M_A g/mol','M_B g/mol','속도비'],gr)+
+      '<p class="cap">그레이엄 법칙은 작은 구멍 유출과 좁은 기공 확산에 대한 법칙입니다. 고분자막의 용해-확산 투과나 스펀지·거즈의 큰 틈 흐름에는 그대로 맞지 않을 수 있습니다(CO₂는 용해도가 커서 더 빠를 수 있음).</p>')}};
+
+/* ===== 모듈 6: 관 끝 경계 조건 ===== */
+const M6={tab:'6 관 끝',
+  html:()=>`<h2>관 끝 경계 조건과 열린 공간</h2><p class="lede">양 끝이 막힌 관과 한쪽이 열린 관의 공명 주파수를 비교합니다. 열린 끝에서는 개구단 보정 0.6r만큼 관이 길어진 것처럼 행동합니다.</p>
+   <p class="note">이론 계산이며 실험으로 확인한 것이 아닙니다. L, r은 가정값입니다.</p>
+   <div class="controls">${ctl('L','관 길이 L (cm)',10,100,1,v=>f(v,0)+' cm')}${ctl('r','관 반지름 r (cm)',0.5,5,0.1,v=>f(v,1)+' cm')}${ctl('v6','공기 음속 v (m/s)',300,380,1,v=>f(v,0)+' m/s')}${ctl('f6','스피커 주파수 f (Hz)',200,3000,50,v=>f(v,0)+' Hz')}</div>
+   <div class="grid"><div class="card"><h3>(a) 관 안 정상파의 변위 진폭</h3><div class="chart"><canvas id="ch6a"></canvas></div></div>
+   <div class="card"><h3>(b) 관 없는 자유 공간: 진폭은 1/r로 줄어든다</h3><div class="chart"><canvas id="ch6b"></canvas></div></div></div>
+   <p class="cap" style="margin:-4px 0 16px">이론 계산이며 실험으로 확인한 것이 아닙니다. (a)는 변위 진폭이며, 진폭이 0인 마디가 간격 v/(2f)로 생깁니다. (b)의 진폭은 r = ${FREE_R0} cm에서 1로 규격화했습니다.</p>
+   <div class="res" id="r6"></div><div id="t6"></div>`,
+  update(){const L=S.L/100,r=S.r/100,v=S.v6,f0=S.f6,Le=L+0.6*r,n=Array.from({length:6},(_,i)=>i+1);
+    const fc=k=>k*v/(2*L),fo=k=>(2*k-1)*v/(4*Le);
+    let ic=1,io=1,bc=1e9,bo=1e9;for(let k=1;k<=60;k++){if(Math.abs(fc(k)-f0)<bc){bc=Math.abs(fc(k)-f0);ic=k}if(Math.abs(fo(k)-f0)<bo){bo=Math.abs(fo(k)-f0);io=k}}
+    const xc=range(0,L,200),xo=range(0,Le,200);
+    draw('ch6a',[line(`양 끝 막힘 n=${ic} (${f(fc(ic),0)} Hz)`,xc.map(x=>({x:x*100,y:Math.abs(Math.sin(ic*Math.PI*x/L))})),C(1)),
+      line(`한쪽 열림 n=${io} (${f(fo(io),0)} Hz)`,xo.map(x=>({x:x*100,y:Math.abs(Math.sin((2*io-1)*Math.PI*x/(2*Le)))})),C(2),{borderDash:[6,4]}),
+      clipLine(L*100,0,L*100,1.3,'관 끝 (x = L)',C(6),[2,3])],{xt:'관 안의 위치 x (cm)',yt:'변위 진폭 (상대값)',xmin:0,ymin:0,ymax:1.3});
+    const rr=range(Math.log10(FREE_R0),2,100).map(e=>Math.pow(10,e));
+    draw('ch6b',[line('자유 공간 점음원: 진폭 ∝ 1/r',rr.map(x=>({x,y:FREE_R0/x})),C(3)),clipLine(FREE_R0,1,100,1,'관 안 정상파: 봉우리 높이 유지(손실 무시)',C(1),[6,4])],{xt:'음원에서의 거리 r (cm, 로그 축)',yt:`진폭 (r = ${FREE_R0} cm에서 1)`,xlog:1,xmin:FREE_R0,xmax:100,ymin:0,ymax:1.3,xticks:[2,5,10,20,50,100]});
+    const err=(L/Le-1)*100;
+    set('r6',`${f(f0,0)} Hz에 가장 가까운 공명: 양 끝 막힘 n=${ic} (${f(fc(ic),1)} Hz, ${sg(fc(ic)-f0,1)} Hz), 한쪽 열림 n=${io} (${f(fo(io),1)} Hz, ${sg(fo(io)-f0,1)} Hz).
+      마디 간격 v/(2f) = <b class="mono">${f(v/(2*f0)*100,2)} cm</b>는 두 경우 모두 같습니다. 개구단 보정 0.6r = ${f(0.6*S.r,2)} cm를 무시하면 음속이 <b class="mono">${sg(err,2)}%</b> (${sg(v*err/100,1)} m/s) 틀립니다.`);
+    set('t6',tbl(`처음 6개 공명 주파수 (L = ${f(S.L,0)} cm, r = ${f(S.r,1)} cm, v = ${f(v,0)} m/s)`,['n','막힘 f_n = nv/(2L) Hz','열림 f_n = (2n−1)v/(4(L+0.6r)) Hz','막힘 마디 간격 cm','열림 마디 간격 cm'],
+      n.map(k=>[k,f(fc(k),1),f(fo(k),1),f(v/(2*fc(k))*100,2),f(v/(2*fo(k))*100,2)])))}};
+
+/* ===== 탭과 라우팅 ===== */
+const MODS=[M0,M1,M2,M3,M4,M5,M6];let cur=0;
+function show(i){cur=i;const m=MODS[i],p=el('panel');p.innerHTML=m.html();
+  p.querySelectorAll('input[data-k]').forEach(inp=>{inp.addEventListener('input',()=>{const k=inp.dataset.k;S[k]=+inp.value;
+    const o=el('o_'+k);if(o){const fn=inp.closest('.ctl').dataset.fmt;o.textContent=FMT[k](S[k])}m.update()})});
+  if(m.init)m.init();m.update();
+  document.querySelectorAll('#tabs button').forEach((b,j)=>b.setAttribute('aria-selected',j===i));
+  history.replaceState(null,'','#mod'+i)}
+/* 슬라이더 출력 형식 */
+const FMT={f3:v=>f(v,0)+' Hz',rhT:v=>f(v,1)+' ℃',rhA:v=>f(v,0)+' %',rhB:v=>f(v,0)+' %',dcm:v=>f(v,2)+' cm',fh:v=>f(v,0)+' Hz',
+  k1:v=>f(v,2),k2:v=>f(v,3),x0:v=>f(v,0)+' %',L:v=>f(v,0)+' cm',r:v=>f(v,1)+' cm',v6:v=>f(v,0)+' m/s',f6:v=>f(v,0)+' Hz',err:v=>'±'+f(v,1)};
+const tabs=el('tabs');MODS.forEach((m,i)=>{const b=document.createElement('button');b.type='button';b.role='tab';b.textContent=m.tab;b.onclick=()=>show(i);tabs.appendChild(b)});
+el('gT').addEventListener('input',e=>{S.T=+e.target.value;el('gTo').textContent=f(S.T,1)+' ℃';MODS[cur].update()});
+/* 테마가 바뀌면 차트 색을 다시 칠한다 */
+const redraw=()=>{Chart.defaults.font.family=css('--sans');MODS[cur].update()};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redraw);
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+Chart.defaults.font.family=css('--sans');
+const h=(location.hash.match(/^#mod(\d)$/)||[])[1];show(h&&MODS[h]?+h:0);
+</script>

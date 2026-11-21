@@ -2,26 +2,16 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>생분해성 고분자 분해 속도 · 지지력 시뮬레이터</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
-    --bg:#f5f7fb; --card:#ffffff; --ink:#1b2430; --sub:#5b6676; --line:#dde3ec;
-    --accent:#2563eb; --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7;
-    --bad:#b91c1c; --bad-bg:#fee2e2; --band:rgba(34,197,94,.13);
-  }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --bg:#0f141c; --card:#171e29; --ink:#e6ebf2; --sub:#9aa6b8; --line:#2a3443;
-      --accent:#60a5fa; --good:#4ade80; --good-bg:#14532d; --warn:#fbbf24; --warn-bg:#78350f;
-      --bad:#f87171; --bad-bg:#7f1d1d; --band:rgba(74,222,128,.14);
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#0f141c; --card:#171e29; --ink:#e6ebf2; --sub:#9aa6b8; --line:#2a3443;
-    --accent:#60a5fa; --good:#4ade80; --good-bg:#14532d; --warn:#fbbf24; --warn-bg:#78350f;
-    --bad:#f87171; --bad-bg:#7f1d1d; --band:rgba(74,222,128,.14);
+    --bg:#ffffff; --card:#ffffff; --ink:#2b2622; --sub:#6e6259; --line:#eadfd6;
+    --accent:#D97757; --accent-ink:#B85A3A; --accent-soft:#FBEFE9;
+    --good:#2f7d4f; --good-bg:#e4f3ea; --warn:#a9621b; --warn-bg:#fdf0dc;
+    --bad:#b3372a; --bad-bg:#fbe5e1; --band:rgba(217,119,87,.14);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
@@ -36,12 +26,16 @@
   .seg button.on{background:var(--accent);color:#fff}
   label{font-size:.9rem;color:var(--sub)}
   select,input[type=number]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
-  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=range]{width:100%;accent-color:var(--accent);-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:var(--line);outline:none;margin:8px 0}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2);margin-top:-6px;cursor:pointer}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:var(--line)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);border:2px solid #fff}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
   .scn{border:1px solid var(--line);border-radius:12px;padding:12px;border-top:5px solid var(--c)}
   .scn header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 8px;margin-bottom:6px}
   .scn header .note{font-size:.8rem}
-  .scn .tag{font-weight:700;color:var(--c)}
+  .scn .tag{font-weight:700;color:var(--accent-ink)}
   .field{margin:8px 0}
   .field .lv{display:flex;justify-content:space-between;font-size:.88rem}
   .field .lv b{color:var(--ink)}
@@ -193,8 +187,8 @@ const SCN_DEFAULT = [
   { poly:'PCL',  cryst:50, mw:100, ph:7.4, temp:37 }
 ];
 const LETTERS = ['A','B','C','D'];
-const COLORS  = ['#2563eb','#f97316','#16a34a','#9333ea'];
-const METRIC_COLORS = { mn:'#2563eb', mass:'#f97316', support:'#16a34a' };
+const COLORS  = ['#D97757','#5B7FA6','#6E9A6B','#9B7BB0'];
+const METRIC_COLORS = { mn:'#D97757', mass:'#5B7FA6', support:'#6E9A6B' };
 const METRIC_LABEL = { mn:'분자량 비율', mass:'질량 잔존율', support:'세포 지지력' };
 
 // ---------- 상태 ----------
@@ -314,9 +308,9 @@ const bandPlugin = {
     const x1 = scales.x.getPixelForValue(tmin());
     const x2 = scales.x.getPixelForValue(tmax());
     ctx.save();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--band') || 'rgba(34,197,94,.13)';
+    ctx.fillStyle = 'rgba(217,119,87,.14)';
     ctx.fillRect(x1, chartArea.top, x2-x1, chartArea.bottom-chartArea.top);
-    ctx.fillStyle = '#15803d';
+    ctx.fillStyle = '#B85A3A';
     ctx.font = '12px system-ui, sans-serif';
     ctx.fillText(`목표 재생 기간 ${tmin()}~${tmax()}주`, x1+6, chartArea.top+14);
     ctx.restore();

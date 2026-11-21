@@ -51,6 +51,7 @@
   th{color:var(--sub);font-weight:600}
   .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
   .princ h3{font-size:1rem;margin:14px 0 4px}
+  .exp-h{font-size:1rem;margin:16px 0 4px;color:var(--accent-ink)}
   .princ ul{margin:4px 0 0 18px;padding:0}
   .princ li{margin:3px 0}
   .formula{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);border-radius:8px;padding:8px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
@@ -122,6 +123,12 @@
       · 완전 분해 시점: 질량 잔존율이 5% 이하로 떨어지는 시간<br>
       · 판정: 지지력 50% 시점이 재생 기간 최소값보다 짧으면 <b>지지력 조기 붕괴</b>, 완전 분해가 재생 기간 최대값의 2배를 넘으면 <b>이물 반응 위험</b>, 그 밖에는 <b>재생-분해 균형 적정</b>.
     </p>
+  </section>
+
+  <!-- 3단계 실험 설계 -->
+  <section class="card" id="expSection">
+    <h2>3단계 실험 설계 <span class="note">(시뮬레이터 모델로 자동 계산 · 목표 기간은 위 입력값 사용)</span></h2>
+    <div id="expBody"></div>
   </section>
 
   <!-- 적용된 과학 원리 -->
@@ -385,6 +392,7 @@ function update(){
   updateChart(results);
   updateTable(results);
   updateCards();
+  renderExperiments();
 }
 
 function updateCards(){
@@ -392,6 +400,52 @@ function updateCards(){
     const card = document.querySelector(`.scn[data-idx="${i}"]`);
     if (card) card.style.display = activeIdx().includes(i) ? '' : 'none';
   });
+}
+
+// ---------- 3단계 실험 설계 ----------
+function renderExperiments(){
+  const lo = tmin(), hi = tmax();
+  const run = (poly, cryst, mw, ph, temp) => analyze({poly, cryst, mw, ph, temp}, lo, hi);
+  const pill = a => `<span class="pill ${a.verdict.cls}">${a.verdict.label}</span>`;
+  const table = (head, rows) => `<div class="table-wrap"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+  // 실험 1: 고분자 종류 비교
+  const e1 = ['PGA','PLGA','PLA','PCL'].map(p => {
+    const a = run(p, 30, 80, 7.4, 37);
+    return [POLY[p].name, a.k.toFixed(4), fmtWeek(a.thalf), fmtWeek(a.t50), fmtDone(a.tdone), pill(a)];
+  });
+  // 실험 2: 선정 고분자(PGA) 결정성 × 분자량
+  const e2 = [];
+  [10,35,60].forEach(c => [40,80,120].forEach(mw => {
+    const a = run('PGA', c, mw, 7.4, 37);
+    e2.push([`${c}%`, `${mw} kDa`, fmtWeek(a.t50), fmtDone(a.tdone), pill(a)]);
+  }));
+  // 실험 3: 정상 vs 염증·발열
+  const e3 = [[7.4,37,'정상'],[6.4,39,'염증·발열']].map(([ph,T,label]) => {
+    const a = run('PGA', 35, 80, ph, T);
+    return [label, ph.toFixed(1), `${T}℃`, a.k.toFixed(4), fmtWeek(a.t50), fmtDone(a.tdone), pill(a)];
+  });
+
+  document.getElementById('expBody').innerHTML = `
+    <h3 class="exp-h">실험 1 · 고분자 종류 비교</h3>
+    <p class="note">독립변인: 고분자 종류 · 통제: 결정성 30%, 80 kDa, pH 7.4, 37℃ · 목표: ${lo}~${hi}주 재생 기간에 가장 가까운 후보 선정</p>
+    ${table(['고분자','k_eff (/주)','분자량 반감기','지지력 50% 시점','완전 분해 시점','판정'], e1)}
+    <p class="note">해석: 지지력 50% 시점이 목표 기간 안에 드는 것은 PGA뿐이지만, 완전 분해가 너무 늦어 이물 반응 기준을 넘습니다. 그래서 실험 2의 대상을 PGA로 정했습니다.</p>
+
+    <h3 class="exp-h">실험 2 · 결정성 × 초기 분자량 최적화 (PGA)</h3>
+    <p class="note">독립변인: 결정성 10·35·60% × 분자량 40·80·120 kDa · 통제: pH 7.4, 37℃ · 목표: 지지력 붕괴와 잔존 이물 반응을 동시에 피하기</p>
+    ${table(['결정성','초기 분자량','지지력 50% 시점','완전 분해 시점','판정'], e2)}
+
+    <h3 class="exp-h">실험 3 · 체내 염증 환경 검증 (PGA, 결정성 35% · 80 kDa)</h3>
+    <p class="note">독립변인: 체내 pH·체온 · 목표: 염증 시 지지력이 목표 기간 전에 무너지는지, 안전 여유가 있는지 확인</p>
+    ${table(['환경','pH','체온','k_eff (/주)','지지력 50% 시점','완전 분해 시점','판정'], e3)}
+
+    <h3 class="exp-h">실제 실험 제안 (선택)</h3>
+    <ul class="note">
+      <li>PGA 또는 PLGA 필름·봉합사를 pH 7.4 / pH 6.4 완충액에 37℃로 담가, 매주 질량과 끊어지는 힘(인장 강도)을 측정합니다.</li>
+      <li>측정 곡선을 시뮬레이션의 질량 잔존율·지지력 곡선과 겹쳐 보고, 경향(어느 조건이 먼저 무너지는지)이 같은지 비교합니다.</li>
+      <li>안전: 체내 이식 실험은 하지 않고 시험관(in vitro) 실험만 합니다. 실험실 안전 수칙과 교사 지도를 따릅니다.</li>
+    </ul>`;
 }
 
 // ---------- 컨트롤 바인딩 ----------

@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생분해성 고분자 분해 속도 · 지지력 시뮬레이터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#ffffff; --ink:#1b2430; --sub:#5b6676; --line:#dde3ec;
+    --accent:#2563eb; --good:#15803d; --good-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7;
+    --bad:#b91c1c; --bad-bg:#fee2e2; --band:rgba(34,197,94,.13);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f141c; --card:#171e29; --ink:#e6ebf2; --sub:#9aa6b8; --line:#2a3443;
+      --accent:#60a5fa; --good:#4ade80; --good-bg:#14532d; --warn:#fbbf24; --warn-bg:#78350f;
+      --bad:#f87171; --bad-bg:#7f1d1d; --band:rgba(74,222,128,.14);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f141c; --card:#171e29; --ink:#e6ebf2; --sub:#9aa6b8; --line:#2a3443;
+    --accent:#60a5fa; --good:#4ade80; --good-bg:#14532d; --warn:#fbbf24; --warn-bg:#78350f;
+    --bad:#f87171; --bad-bg:#7f1d1d; --band:rgba(74,222,128,.14);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px}
+  h1{font-size:1.45rem;margin:4px 0 4px}
+  h2{font-size:1.1rem;margin:0 0 10px}
+  .sub{color:var(--sub);margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:transparent;color:var(--ink);border:0;padding:8px 14px;cursor:pointer;font:inherit}
+  .seg button.on{background:var(--accent);color:#fff}
+  label{font-size:.9rem;color:var(--sub)}
+  select,input[type=number]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .scn{border:1px solid var(--line);border-radius:12px;padding:12px;border-top:5px solid var(--c)}
+  .scn header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 8px;margin-bottom:6px}
+  .scn header .note{font-size:.8rem}
+  .scn .tag{font-weight:700;color:var(--c)}
+  .field{margin:8px 0}
+  .field .lv{display:flex;justify-content:space-between;font-size:.88rem}
+  .field .lv b{color:var(--ink)}
+  .hint{font-size:.8rem;color:var(--sub);margin-top:2px}
+  .chartbox{position:relative;height:380px}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:.85rem}
+  .pill.good{background:var(--good-bg);color:var(--good)}
+  .pill.warn{background:var(--warn-bg);color:var(--warn)}
+  .pill.bad{background:var(--bad-bg);color:var(--bad)}
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:720px}
+  th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{color:var(--sub);font-weight:600}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .princ h3{font-size:1rem;margin:14px 0 4px}
+  .princ ul{margin:4px 0 0 18px;padding:0}
+  .princ li{margin:3px 0}
+  .formula{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);border-radius:8px;padding:8px 10px;margin:6px 0;overflow-x:auto;white-space:nowrap}
+  .note{font-size:.85rem;color:var(--sub)}
+  .toggle{display:flex;gap:8px;align-items:center;font-size:.9rem;color:var(--sub)}
+  footer{color:var(--sub);font-size:.82rem;margin-top:24px}
+  @media (max-width:560px){ .chartbox{height:300px} h1{font-size:1.25rem} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>생분해성 고분자 분해 속도 · 지지력 시뮬레이터</h1>
+  <p class="sub">신경 도관 같은 생체재료가 몸속에서 얼마나 빨리 쪼개지고, 언제까지 세포를 받쳐 줄 수 있는지 1차 반응 속도식으로 계산합니다. 교육용 모델입니다.</p>
+
+  <!-- 모드 + 재생 기간 -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="seg" id="modeSeg">
+        <button data-mode="single" class="on">단일 조건</button>
+        <button data-mode="compare">변인 비교 (최대 4개)</button>
+      </div>
+      <div class="row">
+        <label>목표 재생 기간
+          <input type="number" id="tmin" min="1" max="52" step="1" value="8" style="width:70px"> ~
+          <input type="number" id="tmax" min="1" max="52" step="1" value="12" style="width:70px"> 주
+        </label>
+      </div>
+    </div>
+    <p class="hint" style="margin:8px 0 0">목표 재생 기간은 그래프의 초록 음영과 자동 판정에 쓰입니다. 신경 도관 기준 기본값은 8~12주입니다.</p>
+  </section>
+
+  <!-- 조건 입력 -->
+  <section class="card">
+    <h2>조건 설정 <span class="note" id="scnHint">(변인 5가지: 고분자 종류 · 결정성 · 초기 분자량 · pH · 체온)</span></h2>
+    <div class="grid" id="scenarioGrid"></div>
+  </section>
+
+  <!-- 그래프 -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <h2 style="margin:0">0~52주 변화 곡선</h2>
+      <div class="seg" id="metricSeg">
+        <button data-metric="mn" class="on">분자량 비율</button>
+        <button data-metric="mass">질량 잔존율</button>
+        <button data-metric="support">세포 지지력</button>
+      </div>
+    </div>
+    <p class="hint" id="metricHint" style="margin:0 0 6px">단일 조건에서는 세 가지 곡선을 함께 보여 줍니다.</p>
+    <div class="chartbox"><canvas id="chart"></canvas></div>
+  </section>
+
+  <!-- 판정 + 비교표 -->
+  <section class="card">
+    <h2>핵심 수치 비교 · 자동 판정</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>시나리오</th><th>고분자</th><th>결정성</th><th>초기 분자량</th><th>pH</th><th>체온</th>
+            <th>k_eff (/주)</th><th>분자량 반감기</th><th>지지력 50% 시점</th><th>완전 분해 시점</th><th>판정</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="note" style="margin:10px 0 0">
+      · 분자량 반감기: 분자량이 처음의 절반이 되는 시간 (ln2 / k_eff)<br>
+      · 지지력 50% 시점: 분자량이 임계값(10 kDa)까지 떨어지는 시간<br>
+      · 완전 분해 시점: 질량 잔존율이 5% 이하로 떨어지는 시간<br>
+      · 판정: 지지력 50% 시점이 재생 기간 최소값보다 짧으면 <b>지지력 조기 붕괴</b>, 완전 분해가 재생 기간 최대값의 2배를 넘으면 <b>이물 반응 위험</b>, 그 밖에는 <b>재생-분해 균형 적정</b>.
+    </p>
+  </section>
+
+  <!-- 적용된 과학 원리 -->
+  <section class="card princ" id="principle">
+    <h2>[적용된 과학 원리]</h2>
+
+    <h3>① 분자량이 줄어드는 속도 (1차 반응)</h3>
+    <div class="formula">Mn(t) = Mn₀ × e^(−k_eff × t)</div>
+    <p class="note" style="margin:0">고분자 사슬은 물과 만나 끊어집니다. 남아 있는 사슬이 많을수록 끊어지는 사슬도 많아서, 시간이 지나면 분자량이 지수적으로 줄어듭니다. 그래서 같은 시간이 지나도 처음 길이에 따라 남는 비율이 달라집니다.</p>
+
+    <h3>② 분해 속도 상수 k_eff — 다섯 가지 변인</h3>
+    <div class="formula">k_eff = k₀ × (1 − 결정성) × f_pH × f_T</div>
+    <ul>
+      <li><b>고분자 종류 (k₀)</b>: 단량체 구조가 물을 얼마나 잘 끌어당기는지에 따라 달라집니다. PGA는 물과 잘 어울려 가장 빠르고(k₀ ≈ 0.30/주), PCL은 긴 탄소 사슬이 소수성이라 가장 느립니다(k₀ ≈ 0.015/주). PLGA·PLA는 그 사이입니다.</li>
+      <li><b>결정성 (1 − 결정성)</b>: 결정 영역은 사슬이 촘촘히 붙어 있어 물이 들어가기 어렵습니다. 물은 비정질(느슨한) 영역에서만 쪼개기 때문에, 결정성이 높을수록 속도가 줄어듭니다.</li>
+      <li><b>체내 pH (f_pH = 2^(7.4 − pH))</b>: 에스터 결합은 산(H⁺)이 있으면 더 잘 끊어집니다. pH가 1만큼 낮아지면 수소 이온 농도가 약 10배지만, 속도는 교육용 근사로 약 2배 빨라진다고 둡니다. 염증 부위는 약산성이라 분해가 빨라집니다.</li>
+      <li><b>체온 (f_T, 아레니우스 식)</b>: 온도가 올라가면 분자들이 더 활발히 부딪혀 반응이 빨라집니다. 활성화 에너지 Ea ≈ 65 kJ/mol로 잡으면, 37℃에서 40℃로 오를 때 약 1.27배 빨라집니다.</li>
+    </ul>
+
+    <h3>③ 기계적 지지력</h3>
+    <div class="formula">S(t) = 100 / (1 + e^(−(Mn(t) − Mc) / w)),  Mc = 10 kDa</div>
+    <p class="note" style="margin:0">분자량이 임계값 Mc(10 kDa) 아래로 떨어지면 사슬이 서로 엉키지 못해 지지력이 급격히 약해집니다. Mn = Mc일 때 지지력은 50%입니다. 지지력 50% 시점은 t₅₀ = ln(Mn₀ / Mc) / k_eff로 구할 수 있어서, <b>초기 분자량이 클수록 지지력이 더 오래 유지</b>됩니다. 다만 분자량이 2배가 되어도 시간은 2배가 아니라 ln(2)만큼만 늘어납니다.</p>
+
+    <h3>④ 질량 잔존율</h3>
+    <div class="formula">Mn ≥ 2 kDa 구간: M(t) = 100 %  /  Mn &lt; 2 kDa 이후: M(t) = 100 × e^(−k_eff × (t − t_s))</div>
+    <p class="note" style="margin:0">사슬이 2 kDa 이하의 짧은 조각(올리고머)이 되면 물에 녹아 몸 밖으로 빠져나갈 수 있습니다. 그 전까지는 질량이 거의 그대로 버티다가, 이후 쪼개진 조각이 빠져나가며 질량이 줄어듭니다. t_s = ln(Mn₀ / 2) / k_eff 입니다.</p>
+
+    <h3>⑤ 자동 판정 기준</h3>
+    <p class="note" style="margin:0">
+      <span class="pill bad">지지력 조기 붕괴</span> 지지력 50% 시점 &lt; 재생 기간 최소값 ·
+      <span class="pill warn">이물 반응 위험</span> 완전 분해 시점 &gt; 재생 기간 최대값 × 2 (재생이 끝나도 구조물이 오래 남음) ·
+      <span class="pill good">재생-분해 균형 적정</span> 그 밖의 경우
+    </p>
+
+    <h3>⑥ 이 모델의 한계</h3>
+    <p class="note" style="margin:0">k₀, 임계값(10 kDa), pH 효과(2배), 활성화 에너지는 고등학교 수준 이해를 위한 <b>대표값·근사값</b>입니다. 실제 연구 값은 제조 방식, 공극, 세포·효소 작용, 염증 세포에 따라 크게 달라지므로 수치를 그대로 설계에 쓰면 안 됩니다. 중요한 것은 값이 아니라 <b>어떤 변인이 어떤 방향으로 속도를 바꾸는지</b> 이해하는 것입니다.</p>
+  </section>
+
+  <footer>© 교육용 시뮬레이션 · 실험 데이터를 대신하지 않습니다.</footer>
+</div>
+
+<script>
+// ---------- 모델 상수 (교육용 대표값) ----------
+const POLY = {
+  PGA:  { name:'PGA',  k0:0.30,  note:'가장 친수성 → 가장 빠름' },
+  PLGA: { name:'PLGA', k0:0.20,  note:'PGA·PLA 중간 (50:50 기준)' },
+  PLA:  { name:'PLA',  k0:0.05,  note:'소수성 메틸기 → 느림' },
+  PCL:  { name:'PCL',  k0:0.015, note:'긴 소수성 사슬 → 가장 느림' }
+};
+const MC = 10;        // 임계 분자량 (kDa): 이 아래에서 지지력 급감
+const W_SIG = 1.0;    // 지지력 곡선의 가파른 정도 (kDa)
+const M_SOL = 2;      // 몸속으로 녹아 나갈 수 있는 조각 분자량 (kDa)
+const EA = 65000;     // 활성화 에너지 (J/mol)
+const R = 8.314;
+const T_REF = 310.15; // 37℃ (K)
+const HORIZON = 52;   // 그래프 기간 (주)
+const DT = 0.5;
+
+const SCN_DEFAULT = [
+  { poly:'PLGA', cryst:5,  mw:100, ph:7.4, temp:37 },
+  { poly:'PLA',  cryst:37, mw:100, ph:7.4, temp:37 },
+  { poly:'PGA',  cryst:45, mw:60,  ph:6.4, temp:37 },
+  { poly:'PCL',  cryst:50, mw:100, ph:7.4, temp:37 }
+];
+const LETTERS = ['A','B','C','D'];
+const COLORS  = ['#2563eb','#f97316','#16a34a','#9333ea'];
+const METRIC_COLORS = { mn:'#2563eb', mass:'#f97316', support:'#16a34a' };
+const METRIC_LABEL = { mn:'분자량 비율', mass:'질량 잔존율', support:'세포 지지력' };
+
+// ---------- 상태 ----------
+const state = {
+  mode: 'single',
+  metric: 'mn',
+  scn: SCN_DEFAULT.map(s => ({...s}))
+};
+
+// ---------- 계산 ----------
+function factors(s){
+  const k0 = POLY[s.poly].k0;
+  const fc = 1 - s.cryst/100;
+  const fpH = Math.pow(2, 7.4 - s.ph);
+  const TK = s.temp + 273.15;
+  const fT = Math.exp(-(EA/R)*(1/TK - 1/T_REF));
+  return { k0, fc, fpH, fT, k: k0*fc*fpH*fT };
+}
+
+function analyze(s, tmin, tmax){
+  const f = factors(s);
+  const k = f.k, mn0 = s.mw;
+  const mnAt   = t => mn0*Math.exp(-k*t);
+  const ratioAt= t => 100*Math.exp(-k*t);
+  const supportAt = t => 100/(1+Math.exp(-(mnAt(t)-MC)/W_SIG));
+  const ts = mn0 > M_SOL ? Math.log(mn0/M_SOL)/k : 0;
+  const massAt = t => t <= ts ? 100 : 100*Math.exp(-k*(t-ts));
+  const thalf = Math.LN2/k;
+  const t50 = mn0 > MC ? Math.log(mn0/MC)/k : 0;
+  const tdone = ts + Math.log(100/5)/k;
+
+  let verdict;
+  if (t50 < tmin) verdict = { label:'지지력 조기 붕괴', cls:'bad' };
+  else if (tdone > 2*tmax) verdict = { label:'이물 반응 위험', cls:'warn' };
+  else verdict = { label:'재생-분해 균형 적정', cls:'good' };
+
+  return { f, k, thalf, t50, tdone, ratioAt, massAt, supportAt, verdict };
+}
+
+function series(a, metric){
+  const pts = [];
+  for (let t=0; t<=HORIZON+1e-9; t+=DT){
+    const v = metric==='mn' ? a.ratioAt(t) : metric==='mass' ? a.massAt(t) : a.supportAt(t);
+    pts.push({x:+t.toFixed(1), y:+v.toFixed(2)});
+  }
+  return pts;
+}
+
+// ---------- 표시 도우미 ----------
+const fmtWeek = w => w >= 1000 ? '1000주 이상' : `${w.toFixed(1)}주 (약 ${(w/4.345).toFixed(1)}개월)`;
+const fmtDone = w => w > HORIZON ? `${w.toFixed(0)}주 (약 ${(w/52).toFixed(1)}년)` : fmtWeek(w);
+const tmin = () => Math.max(1, +document.getElementById('tmin').value || 8);
+const tmax = () => Math.max(tmin(), +document.getElementById('tmax').value || 12);
+
+function activeIdx(){ return state.mode==='single' ? [0] : [0,1,2,3]; }
+
+// ---------- 조건 카드 ----------
+function buildCards(){
+  const grid = document.getElementById('scenarioGrid');
+  grid.innerHTML = '';
+  LETTERS.forEach((L, i) => {
+    const s = state.scn[i];
+    const card = document.createElement('div');
+    card.className = 'scn';
+    card.style.setProperty('--c', COLORS[i]);
+    card.dataset.idx = i;
+    card.innerHTML = `
+      <header><span class="tag">시나리오 ${L}</span><span class="note">${POLY[s.poly].note}</span></header>
+      <div class="field"><label>고분자 종류</label>
+        <select data-k="poly">${Object.keys(POLY).map(p=>`<option ${p===s.poly?'selected':''}>${p}</option>`).join('')}</select>
+      </div>
+      <div class="field"><div class="lv"><label>결정성</label><b data-v="cryst">${s.cryst}%</b></div>
+        <input type="range" min="0" max="70" step="5" value="${s.cryst}" data-k="cryst">
+        <div class="hint">결정이 촘촘할수록 물이 덜 들어와 느려짐 (0~70%)</div></div>
+      <div class="field"><div class="lv"><label>초기 분자량</label><b data-v="mw">${s.mw} kDa</b></div>
+        <input type="range" min="20" max="150" step="5" value="${s.mw}" data-k="mw">
+        <div class="hint">클수록 임계값(10 kDa)까지 오래 걸림 (20~150 kDa)</div></div>
+      <div class="field"><div class="lv"><label>체내 pH</label><b data-v="ph">${s.ph.toFixed(1)}${s.ph<7?' (염증 환경)':s.ph<7.3?'':' (정상)'}</b></div>
+        <input type="range" min="6.4" max="7.4" step="0.1" value="${s.ph}" data-k="ph">
+        <div class="hint">약산성일수록 에스터 결합이 빨리 끊어짐 (6.4~7.4)</div></div>
+      <div class="field"><div class="lv"><label>체온</label><b data-v="temp">${s.temp.toFixed(1)} ℃</b></div>
+        <input type="range" min="35" max="40" step="0.5" value="${s.temp}" data-k="temp">
+        <div class="hint">높을수록 반응이 빨라짐 (기본 37℃)</div></div>`;
+    grid.appendChild(card);
+    card.style.display = activeIdx().includes(i) ? '' : 'none';
+  });
+  grid.querySelectorAll('[data-k]').forEach(el => el.addEventListener('input', onInput));
+}
+
+function onInput(e){
+  const card = e.target.closest('.scn');
+  const i = +card.dataset.idx;
+  const k = e.target.dataset.k;
+  const s = state.scn[i];
+  if (k==='poly') s.poly = e.target.value;
+  else s[k] = +e.target.value;
+  refreshCardLabels(i);
+  update();
+}
+
+function refreshCardLabels(i){
+  const s = state.scn[i];
+  const card = document.querySelector(`.scn[data-idx="${i}"]`);
+  card.querySelector('[data-v="cryst"]').textContent = s.cryst+'%';
+  card.querySelector('[data-v="mw"]').textContent = s.mw+' kDa';
+  card.querySelector('[data-v="ph"]').textContent = s.ph.toFixed(1)+(s.ph<7?' (염증 환경)':s.ph<7.3?'':' (정상)');
+  card.querySelector('[data-v="temp"]').textContent = s.temp.toFixed(1)+' ℃';
+  card.querySelector('.scn .note, .scn header .note').textContent = POLY[s.poly].note;
+}
+
+// ---------- 차트 ----------
+const bandPlugin = {
+  id:'band',
+  beforeDatasetsDraw(chart){
+    const {ctx, chartArea, scales} = chart;
+    if (!chartArea) return;
+    const x1 = scales.x.getPixelForValue(tmin());
+    const x2 = scales.x.getPixelForValue(tmax());
+    ctx.save();
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--band') || 'rgba(34,197,94,.13)';
+    ctx.fillRect(x1, chartArea.top, x2-x1, chartArea.bottom-chartArea.top);
+    ctx.fillStyle = '#15803d';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(`목표 재생 기간 ${tmin()}~${tmax()}주`, x1+6, chartArea.top+14);
+    ctx.restore();
+  }
+};
+
+const chart = new Chart(document.getElementById('chart'), {
+  type:'line',
+  data:{ datasets:[] },
+  plugins:[bandPlugin],
+  options:{
+    responsive:true, maintainAspectRatio:false, animation:false,
+    parsing:false, normalized:true,
+    interaction:{ mode:'index', intersect:false },
+    scales:{
+      x:{ type:'linear', min:0, max:HORIZON, title:{display:true, text:'시간 (주)'}, ticks:{stepSize:4} },
+      y:{ min:0, max:100, title:{display:true, text:'%'} }
+    },
+    plugins:{
+      legend:{ position:'bottom' },
+      tooltip:{ callbacks:{ title: items => `${items[0].parsed.x}주 후` } }
+    },
+    elements:{ point:{ radius:0 }, line:{ borderWidth:2.5, tension:.25 } }
+  }
+});
+
+function updateChart(results){
+  const ds = [];
+  if (state.mode === 'single'){
+    const a = results[0];
+    ds.push({ label:'분자량 비율', data:series(a,'mn'), borderColor:METRIC_COLORS.mn });
+    ds.push({ label:'질량 잔존율', data:series(a,'mass'), borderColor:METRIC_COLORS.mass });
+    ds.push({ label:'세포 지지력', data:series(a,'support'), borderColor:METRIC_COLORS.support });
+    document.getElementById('metricHint').textContent = '단일 조건에서는 세 가지 곡선을 함께 보여 줍니다.';
+  } else {
+    results.forEach((a, j) => {
+      const s = state.scn[j];
+      ds.push({ label:`${LETTERS[j]} · ${POLY[s.poly].name} ${s.mw}kDa`, data:series(a,state.metric), borderColor:COLORS[j] });
+    });
+    document.getElementById('metricHint').textContent = `지금 보는 곡선: ${METRIC_LABEL[state.metric]} (위 버튼으로 바꿀 수 있습니다)`;
+  }
+  chart.data.datasets = ds;
+  chart.update();
+}
+
+// ---------- 표 ----------
+function updateTable(results){
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = results.map((a, j) => {
+    const s = state.scn[j];
+    const dot = `<span class="dot" style="background:${COLORS[j]}"></span>`;
+    return `<tr>
+      <td>${dot}${LETTERS[j]}</td>
+      <td>${POLY[s.poly].name}</td>
+      <td>${s.cryst}%</td>
+      <td>${s.mw} kDa</td>
+      <td>${s.ph.toFixed(1)}</td>
+      <td>${s.temp.toFixed(1)}℃</td>
+      <td>${a.k.toFixed(4)}</td>
+      <td>${fmtWeek(a.thalf)}</td>
+      <td>${fmtWeek(a.t50)}</td>
+      <td>${fmtDone(a.tdone)}</td>
+      <td><span class="pill ${a.verdict.cls}">${a.verdict.label}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- 전체 갱신 ----------
+function update(){
+  const lo = tmin(), hi = tmax();
+  const results = activeIdx().map(i => analyze(state.scn[i], lo, hi));
+  updateChart(results);
+  updateTable(results);
+  updateCards();
+}
+
+function updateCards(){
+  LETTERS.forEach((_, i) => {
+    const card = document.querySelector(`.scn[data-idx="${i}"]`);
+    if (card) card.style.display = activeIdx().includes(i) ? '' : 'none';
+  });
+}
+
+// ---------- 컨트롤 바인딩 ----------
+document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => {
+  state.mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('on', x===b));
+  document.getElementById('scnHint').textContent = state.mode==='single'
+    ? '(변인 5가지: 고분자 종류 · 결정성 · 초기 분자량 · pH · 체온)'
+    : '(시나리오 A~D를 같은 그래프에 겹쳐 비교합니다)';
+  document.getElementById('metricSeg').style.visibility = state.mode==='single' ? 'hidden' : 'visible';
+  update();
+}));
+document.querySelectorAll('#metricSeg button').forEach(b => b.addEventListener('click', () => {
+  state.metric = b.dataset.metric;
+  document.querySelectorAll('#metricSeg button').forEach(x => x.classList.toggle('on', x===b));
+  update();
+}));
+['tmin','tmax'].forEach(id => document.getElementById(id).addEventListener('input', update));
+
+buildCards();
+document.getElementById('metricSeg').style.visibility = 'hidden';
+update();
+</script>
+</body>
+</html>

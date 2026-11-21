@@ -80,7 +80,7 @@
         </label>
       </div>
     </div>
-    <p class="hint" style="margin:8px 0 0">목표 재생 기간은 그래프의 초록 음영과 자동 판정에 쓰입니다. 신경 도관 기준 기본값은 8~12주입니다.</p>
+    <p class="hint" style="margin:8px 0 0">목표 재생 기간은 그래프의 주황 음영과 자동 판정에 쓰입니다. 신경 도관 기준 기본값은 8~12주입니다.</p>
   </section>
 
   <!-- 조건 입력 -->
@@ -99,7 +99,10 @@
         <button data-metric="support">세포 지지력</button>
       </div>
     </div>
-    <p class="hint" id="metricHint" style="margin:0 0 6px">단일 조건에서는 세 가지 곡선을 함께 보여 줍니다.</p>
+    <div class="row" style="justify-content:space-between;margin:0 0 6px">
+      <p class="hint" id="metricHint" style="margin:0">단일 조건에서는 세 가지 곡선을 함께 보여 줍니다.</p>
+      <button type="button" id="pngBtn" style="font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer">PNG 저장</button>
+    </div>
     <div class="chartbox"><canvas id="chart"></canvas></div>
   </section>
 
@@ -150,7 +153,7 @@
 
     <h3>③ 기계적 지지력</h3>
     <div class="formula">S(t) = 100 / (1 + e^(−(Mn(t) − Mc) / w)),  Mc = 10 kDa</div>
-    <p class="note" style="margin:0">분자량이 임계값 Mc(10 kDa) 아래로 떨어지면 사슬이 서로 엉키지 못해 지지력이 급격히 약해집니다. Mn = Mc일 때 지지력은 50%입니다. 지지력 50% 시점은 t₅₀ = ln(Mn₀ / Mc) / k_eff로 구할 수 있어서, <b>초기 분자량이 클수록 지지력이 더 오래 유지</b>됩니다. 다만 분자량이 2배가 되어도 시간은 2배가 아니라 ln(2)만큼만 늘어납니다.</p>
+    <p class="note" style="margin:0">분자량이 임계값 Mc(10 kDa) 아래로 떨어지면 사슬이 서로 엉키지 못해 지지력이 급격히 약해집니다. Mn = Mc일 때 지지력은 50%입니다. 지지력 50% 시점은 t₅₀ = ln(Mn₀ / Mc) / k_eff로 구할 수 있어서, <b>초기 분자량이 클수록 지지력이 더 오래 유지</b>됩니다. 다만 분자량이 2배가 되면 지지력 50% 시점은 ln(2) / k_eff(분자량 반감기 한 번 분)만큼만 늘어납니다.</p>
 
     <h3>④ 질량 잔존율</h3>
     <div class="formula">Mn ≥ 2 kDa 구간: M(t) = 100 %  /  Mn &lt; 2 kDa 이후: M(t) = 100 × e^(−k_eff × (t − t_s))</div>
@@ -189,7 +192,7 @@ const DT = 0.5;
 
 const SCN_DEFAULT = [
   { poly:'PLGA', cryst:5,  mw:100, ph:7.4, temp:37 },
-  { poly:'PLA',  cryst:37, mw:100, ph:7.4, temp:37 },
+  { poly:'PLA',  cryst:35, mw:100, ph:7.4, temp:37 },
   { poly:'PGA',  cryst:45, mw:60,  ph:6.4, temp:37 },
   { poly:'PCL',  cryst:50, mw:100, ph:7.4, temp:37 }
 ];
@@ -426,11 +429,21 @@ function renderExperiments(){
     return [label, ph.toFixed(1), `${T}℃`, a.k.toFixed(4), fmtWeek(a.t50), fmtDone(a.tdone), pill(a)];
   });
 
+  const e1Res = ['PGA','PLGA','PLA','PCL'].map(p => ({name: POLY[p].name, a: run(p, 30, 80, 7.4, 37)}));
+  const inWindow = e1Res.filter(r => r.a.t50 >= lo && r.a.t50 <= hi).map(r => r.name);
+  const okAll = e1Res.filter(r => r.a.verdict.cls === 'good').map(r => r.name);
+  const interpText = (inWindow.length
+    ? `지지력 50% 시점이 목표 기간(${lo}~${hi}주) 안에 드는 후보: ${inWindow.join(', ')}.`
+    : `지지력 50% 시점이 목표 기간(${lo}~${hi}주) 안에 드는 후보가 없습니다.`)
+    + (okAll.length
+      ? ` 판정이 "재생-분해 균형 적정"인 고분자: ${okAll.join(', ')}.`
+      : ` 판정이 "재생-분해 균형 적정"인 고분자는 없습니다. 완전 분해가 목표 기간 대비 너무 늦거나(이물 반응 위험) 지지력이 먼저 무너집니다.`);
+
   document.getElementById('expBody').innerHTML = `
     <h3 class="exp-h">실험 1 · 고분자 종류 비교</h3>
     <p class="note">독립변인: 고분자 종류 · 통제: 결정성 30%, 80 kDa, pH 7.4, 37℃ · 목표: ${lo}~${hi}주 재생 기간에 가장 가까운 후보 선정</p>
     ${table(['고분자','k_eff (/주)','분자량 반감기','지지력 50% 시점','완전 분해 시점','판정'], e1)}
-    <p class="note">해석: 지지력 50% 시점이 목표 기간 안에 드는 것은 PGA뿐이지만, 완전 분해가 너무 늦어 이물 반응 기준을 넘습니다. 그래서 실험 2의 대상을 PGA로 정했습니다.</p>
+    <p class="note" id="e1Interp">${interpText}</p>
 
     <h3 class="exp-h">실험 2 · 결정성 × 초기 분자량 최적화 (PGA)</h3>
     <p class="note">독립변인: 결정성 10·35·60% × 분자량 40·80·120 kDa · 통제: pH 7.4, 37℃ · 목표: 지지력 붕괴와 잔존 이물 반응을 동시에 피하기</p>
@@ -447,6 +460,23 @@ function renderExperiments(){
       <li>안전: 체내 이식 실험은 하지 않고 시험관(in vitro) 실험만 합니다. 실험실 안전 수칙과 교사 지도를 따릅니다.</li>
     </ul>`;
 }
+
+// ---------- PNG 저장 (흰 배경) ----------
+document.getElementById('pngBtn').addEventListener('click', () => {
+  const src = chart.canvas;
+  const out = document.createElement('canvas');
+  out.width = src.width; out.height = src.height;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, 0, 0);
+  const a = document.createElement('a');
+  a.href = out.toDataURL('image/png');
+  a.download = 'polymer-degradation-curves.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
 
 // ---------- 컨트롤 바인딩 ----------
 document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => {

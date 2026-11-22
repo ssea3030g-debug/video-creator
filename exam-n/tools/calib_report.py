@@ -81,7 +81,7 @@ def stats(rows):
 
 def main():
     data = {ex: load(ex) for ex in ("mid", "v2", "pilot")}
-    names = {"mid": "중간고사(기준점)", "v2": "v2(최상)", "pilot": "파일럿"}
+    names = {"mid": "중간고사(기준점)", "v2": "v2(AI 제작·난이도 미검증)", "pilot": "파일럿"}
     md = ["## 자료별 S5(지문 없이) 비교", "",
           "| 자료 | 모델 | 풀린 문항 | 확신≥4 맞힘 | 확신5 맞힘 | 맞힘(확신 무관) | 확신≥4 틀림 |", "|---|---|---|---|---|---|---|"]
     for ex, (rows, models) in data.items():

@@ -27,6 +27,11 @@
 ## 시험지 풀이 앱
 - `exam-app/`: 시험지 PDF를 올려 45분 타이머로 푸는 PWA (펜슬 필기·마킹·자동 채점). 설명·실행법은 `exam-app/README.md`. 파서 규칙은 `exam-app/src/parse.js`.
 
+## 국어 모의고사·n제 제작 (exam-n/core/)
+- 문항 제작은 `exam-n/core/핵심-틀.md`만 보고 한다(지침 원문 전체는 읽지 않는다). 순서는 `exam-n/core/작업-흐름.md`, 난이도는 `exam-n/core/난이도-상향-프로토콜.md`.
+- 만든 뒤에는 오류(정답 오류·복수 정답·근거 없음·계산·뜻풀이)만 검수하고, "지침서 기준 검수도 할까요?"라고 묻는다. 하라고 하면 그때 지침 원문 전체(`exam-n/docs/`, 현재 `claude/vibrant-einstein-iskm3i` 브랜치)로 검수·선지 다듬기·형식 맞추기를 한다.
+- 새 세션에서는 세트 1개만 먼저 만들어 보여주고, 허락받은 뒤 나머지를 만든다.
+
 ## 영상 만들기
 - 지침 순서: `$HOME/lemo-opuscar/AGENTS.md` → `styles/<slug>/STYLE.md` → `DIRECTOR.md` / `TECHNIQUE.md`. 스타일 목록: `styles/README.md`.
 - 프로젝트 폴더는 **이 저장소의 `films/<이름>/`**. 라이브러리 도구는 `cd $HOME/lemo-opuscar && node core/render/… <프로젝트 절대경로>`로 실행.

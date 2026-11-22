@@ -10,7 +10,7 @@
 신호(걸리면 재작성 후보):
   S1 지문 복사도  : 정답 선지 3-gram이 지문 한 문장에 담긴 비율 ≥ thr  ("가장 적절한 것"·배점 2.7↑·긴 선지만)
   S2 극단어 오답  : 강한 극단어("아무런·전혀·오직·~에만…")가 오답에 2개 이상, 또는 정답 선지에만 있음
-  S3 길이 단서    : 정답 길이 순위 1위, ±35% 이탈, 파트 길이대 이탈 / 회차 정답 최장 비율 > 40%
+  S3 길이 단서    : 회차에서 '긍정 발문' 정답 최장 비율 > 50% (문항별 순위 1위·±35%·파트 길이대는 참고로만 출력)
   S4 기법 분포    : (--cards) 같은 문항 오답 기법 중복, 회차 앞참뒤거짓 비율 > 40%, 근거 한 곳뿐
   L  난이도 정직화: 해설 `난이도: L? (A B C D E, 합n)` 태그가 5축 합과 어긋남, L3+ 비율
 """
@@ -121,6 +121,7 @@ def main():
     cards = parse_cards(open(args.cards, encoding="utf-8").read()) if args.cards else {}
 
     rows, flags = [], collections.defaultdict(list)
+    info = collections.defaultdict(list)  # 참고(문항별 신호로 쓰기엔 기준점에서도 흔한 것)
     for q in qs:
         n, o, a = q["n"], q["opts"], key[q["n"]]
         L = [len(norm(x)) for x in o]
@@ -131,15 +132,16 @@ def main():
         r = {"n": n, "score": q["score"], "neg": q["neg"], "key": a, "mean": round(mean), "rank": rank,
              "boggi": bool(q["boggi"]), "vocab": bool(vocab)}
 
-        # S3 길이
-        if rank == 1 and not vocab:
-            flags[n].append("S3 정답이 가장 긴 선지")
+        # S3 길이 — 기준점(중간고사) 실측: 정답 최장 50%(긍정 38%), ±35% 이탈 다수 → 문항별 신호가 아니라 참고.
+        #   회차 단위로 '긍정 발문 정답 최장 비율 > 50%'만 신호(아래 요약). '않은' 발문은 정답(거짓)이 길어지는 경향이 있어 분리.
+        if rank == 1 and not vocab and not q["neg"]:
+            info[n].append("S3 긍정 발문인데 정답이 가장 긴 선지")
         if out35 and not vocab:
-            flags[n].append(f"S3 길이 ±35% 이탈 {out35}")
+            info[n].append(f"S3 길이 ±35% 이탈 {out35}")
         if args.part and not vocab:
             lo, hi = BANDS[args.part]
             if mean < lo * 0.75 or mean > hi * 1.3:
-                flags[n].append(f"S3 파트 길이대({args.part} {lo}~{hi}자) 이탈: 평균 {round(mean)}자")
+                info[n].append(f"S3 파트 길이대({args.part} {lo}~{hi}자) 이탈: 평균 {round(mean)}자")
 
         # S1 지문 복사도 (정답 선지 vs 지문 문장)
         sents = passages.get(n)
@@ -190,8 +192,10 @@ def main():
 
     # 회차 요약
     tot_q = len(rows)
-    longest = sum(1 for r in rows if r["rank"] == 1 and not r["vocab"])
-    nonvocab = sum(1 for r in rows if not r["vocab"]) or 1
+    pos = [r for r in rows if not r["vocab"] and not r["neg"]]
+    neg = [r for r in rows if not r["vocab"] and r["neg"]]
+    pos_longest = sum(1 for r in pos if r["rank"] == 1)
+    neg_longest = sum(1 for r in neg if r["rank"] == 1)
     dist = collections.Counter(r["key"] for r in rows)
     ks = [r["key"] for r in rows]
     runs = [i + 1 for i in range(len(ks) - 2) if ks[i] == ks[i + 1] == ks[i + 2]]
@@ -200,12 +204,13 @@ def main():
         "배점합": round(sum(r["score"] or 0 for r in rows), 1),
         "정답분포": {CIRC[k - 1]: dist.get(k, 0) for k in range(1, 6)},
         "정답 3연속 시작 번호": runs,
-        "정답이 가장 긴 비율(어휘 제외)": f"{longest}/{nonvocab} = {longest / nonvocab:.0%}",
+        "정답이 가장 긴 비율 — 긍정 발문(어휘 제외)": f"{pos_longest}/{len(pos)} = {pos_longest / (len(pos) or 1):.0%} (기준점 38%, 신호 기준 50% 초과)",
+        "정답이 가장 긴 비율 — '않은' 발문(참고)": f"{neg_longest}/{len(neg)} = {neg_longest / (len(neg) or 1):.0%} (기준점 54%)",
         "발문 적절하지 않은 것": f"{sum(1 for r in rows if r['neg'])}/{tot_q}",
         "<보기> 문항": sum(1 for r in rows if r["boggi"]),
     }
-    if longest / nonvocab > 0.40 and tot_q >= 8:
-        summ["!! S3"] = "정답이 가장 긴 문항 비율 40% 초과"
+    if len(pos) >= 4 and pos_longest / len(pos) > 0.50:
+        summ["!! S3"] = "긍정 발문 정답 최장 비율 50% 초과 → 길이 단서(재작성 후보: 정답이 가장 긴 긍정 발문 문항)"
     lvs = [r["L"] for r in rows if "L" in r]
     if lvs:
         summ["5축 합 기준 L 분포"] = {f"L{k}": lvs.count(k) for k in range(1, 5)}
@@ -238,6 +243,11 @@ def main():
                 print(f"  Q{n}: {f}")
     else:
         print("\n걸린 신호 없음.")
+    if info:
+        print("\n참고(기준점에서도 흔해 문항별 재작성 근거로 쓰지 않음):")
+        for n in sorted(info):
+            for f in info[n]:
+                print(f"  Q{n}: {f}")
     print("\n(이 스크립트는 형식·표면 신호만 본다. 정답 오류·복수 정답은 blind_solve.py와 직접 대조로 확인.)")
 
 

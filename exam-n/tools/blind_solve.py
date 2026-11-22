@@ -185,8 +185,11 @@ def main():
                          f"(확신{conf})")
             r["_ans"], r["_conf"] = ans, conf if isinstance(conf, int) else 0
         rn, rp = results[n].get("nopassage"), results[n].get("passage")
-        if a and rn and "_ans" in rn and rn["_ans"] == a and rn["_conf"] >= args.conf_high:
-            verdict.append("S5 지문 없이도 확신하고 맞힘 → 소거로 풀림 후보(B축 0)")
+        s5_hit = bool(a and rn and "_ans" in rn and rn["_ans"] == a and rn["_conf"] >= args.conf_high)
+        if s5_hit and q["neg"]:
+            verdict.append("(S5 적중이나 '않은' 발문 — 기준점(중간고사)도 12/13이 이 칸에서 적중해 신호 아님)")
+        elif s5_hit:
+            verdict.append("S5 긍정 발문 지문 없이 확신하고 맞힘 → 소거로 풀림 후보(B축 0, 세트 단위로 판단)")
         if rp and "_ans" in rp:
             if rp["_ans"] in (0, -1):
                 verdict.append("S6 모델이 '정답 없음/둘 이상' 주장 → 직접 대조")
@@ -197,7 +200,12 @@ def main():
             elif a and rp["_conf"] >= 5 and rn and rn.get("_ans") != a:
                 verdict.append("지문 필요 + 고확신 → 정상 범위")
         print(f"{n:>3} {CIRC[a - 1] if a else '?':<3} | {cells[0]:<12} | {cells[1]:<12} | {'; '.join(verdict) or '-'}")
-        summary.append({"n": n, "key": a, "nopassage": rn, "passage": rp, "verdict": verdict})
+        summary.append({"n": n, "key": a, "neg": q["neg"], "s5_hit": s5_hit, "nopassage": rn, "passage": rp, "verdict": verdict})
+    pos_all = [x for x in summary if not x["neg"] and x["nopassage"] and "_ans" in x["nopassage"]]
+    if pos_all:
+        hit = sum(1 for x in pos_all if x["s5_hit"])
+        print(f"\nS5 세트 단위: 긍정 발문 {hit}/{len(pos_all)} = {hit / len(pos_all):.0%} 적중. "
+              "참고 기준선(중간고사, lite 모델, n=16): 19%. 임시 경계 40% 초과면 '쉬움 후보'(v4·flash 재측정 전 값, 문항 수가 적으면 단정 금지).")
     print("\n※ S5는 5지선다 우연 정답(20%)이 있어 '확신 높음 + 맞힘'일 때만 신호로 본다. 약한 모델이면 '검증 약함'.")
     if args.out:
         json.dump({"models": sorted(models_used), "results": summary}, open(args.out, "w", encoding="utf-8"),

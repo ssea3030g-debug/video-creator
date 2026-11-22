@@ -7,6 +7,8 @@
 | `check_set.py` | 구형 점검(선지 길이·정답 분포·배점 합). `check_hard.py`가 대체하지만 남겨 둠 | 0 |
 | `make_exam_pdf.py`, `make_exam_multi.py` | md → 시험지 PDF | 0 |
 | `examlib.py` | 위 스크립트의 문항 md 파서 | — |
+| `import_exam.py` | 2단 시험지 PDF(`pdf`)·모의고사 md(`md`) → examlib 형식 변환. 결과는 /tmp에만 둘 것(학교 저작물) | 0 |
+| `calib_report.py` | 맹검·check_hard 결과 JSON → 자료별 비교표·문항별 JSON(`sets/calib/`) | 0 |
 
 모두 표준 라이브러리만 쓴다. 실행은 `python3 -I`.
 
@@ -26,6 +28,8 @@ cd exam-n/tools
 python3 -I check_hard.py ../sets/pilot/s1.md --passage /tmp/s1.md --answers ../sets/pilot/s1.md --part 인문 --cards ../sets/pilot/cards.md
 python3 -I blind_solve.py ../sets/pilot/s1.md --passage /tmp/s1.md --answers ../sets/pilot/s1.md --out /tmp/blind.json
 python3 -I blind_solve.py … --dry-run     # 보낼 프롬프트만 확인(네트워크 없음)
+python3 -I blind_solve.py … --sleep 2     # 호출 간격(429 방지). 한 호출이 실패해도 전체는 계속, 결과에 '실패/없음'으로 남음
+# 429가 오래 가면(쿨다운) --model gemini-3.5-flash-lite 로 바꾸고 '검증 약함'으로 표시. 병렬로 여러 개 돌리지 말 것
 ```
 - `blind_solve.py`는 FreeLLMAPI(`FREELLM_BASE`, 기본 `http://localhost:3001/v1`; 키는 `FREELLM_KEY` 또는 `~/.freellmapi-session/unified-key`)를 쓴다. 없으면 "미실시"로 보고하고 넘어간다.
 - 정답표·해설·배점·난이도 태그는 모델에 보내지 않는다. lite 모델이 풀면 "검증 약함".
@@ -40,3 +44,13 @@ python3 -I blind_solve.py … --dry-run     # 보낼 프롬프트만 확인(네�
 | L | 해설 L 태그·합 표기가 5축 합과 어긋남, L3+ < 55% | v6에서 11건 어긋남 |
 | S5 | 지문 없이 확신 ≥ 4로 정답 | 5지선다 우연 20% |
 | S6 | 지문 주고 정답과 다름 / 정답없음·둘이상 / 확신 ≤ 2 | 직접 대조 |
+
+### 보정 제안 (2026-11, `sets/calib/요약.md` 근거 — 코드 기본값은 아직 그대로)
+기준점(중간고사 29문항)·최상(v2 33문항)·파일럿을 lite 모델 1회 풀이로 비교한 **추정**이다(정답률 데이터 아님).
+| 신호 | 제안 |
+|---|---|
+| S5 | **긍정 발문만** 본다. '않은' 발문은 기준점 92%·최상 76%가 지문 없이 풀려 신호가 아님. 세트 단위로 긍정 발문 적중 > 40%면 쉬움 후보(기준점 19%, 최상 38%). 확신 5만 보는 안은 구분력 없음 |
+| S5 파트·배점대 | 표본 부족(칸당 ≤12문항)으로 별도 기준선 없음 |
+| S3 | 정답 최장 비율을 긍정 발문 기준 > 50%로(기준점 전체 50%, v2 긍정 81%). '않은' 발문은 따로 |
+| S1 | 0.6 임계는 기준점·최상 모두 0건 → 정답-오답 복사도 차이 기준으로 대체 검토 |
+| 선지 중심값 | 적중 우연 수준 → 도입 안 함 |

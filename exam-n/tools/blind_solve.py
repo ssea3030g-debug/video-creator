@@ -32,7 +32,7 @@ def fmt_q(q, with_no=True):
     return s
 
 
-def call(base, key, model, system, user, retries=4):
+def call(base, key, model, system, user, retries=6):
     body = json.dumps({"model": model, "temperature": 0,
                        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
                       ensure_ascii=False).encode()
@@ -47,13 +47,13 @@ def call(base, key, model, system, user, retries=4):
         except urllib.error.HTTPError as e:
             last = f"HTTP {e.code}"
             if e.code in (429, 500, 502, 503, 504):
-                time.sleep(2 * 2 ** i)
+                time.sleep(min(60, 4 * 2 ** i))
                 continue
-            raise SystemExit(f"요청 실패: {last} {e.read()[:200]!r}")
+            return None, f"{last} {e.read()[:120]!r}"
         except (urllib.error.URLError, TimeoutError) as e:
             last = str(e)
-            time.sleep(2 * 2 ** i)
-    raise SystemExit(f"요청 실패(재시도 소진): {last}")
+            time.sleep(min(60, 4 * 2 ** i))
+    return None, f"재시도 소진: {last}"   # 한 문항 실패가 전체를 죽이지 않게 한다(결과에 '실패'로 남김)
 
 
 def parse_json_obj(text):
@@ -86,6 +86,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--conf-high", type=int, default=4)
+    ap.add_argument("--sleep", type=float, default=0, help="호출 사이 대기(초). 429가 잦으면 2~4")
     args = ap.parse_args()
 
     qtext = open(args.questions, encoding="utf-8").read()
@@ -123,7 +124,12 @@ def main():
         if args.dry_run:
             print(f"----- [{mode}] 문항 {[q['n'] for q in items]} / {len(prompt)}자 -----\n{prompt}\n")
             return
+        if args.sleep:
+            time.sleep(args.sleep)
         text, used = call(base, apikey, args.model, SYSTEM, prompt)
+        if text is None:
+            print(f"  [실패] 문항 {[q['n'] for q in items]} {mode}: {used}", file=sys.stderr)
+            return ""
         models_used.add(used)
         return text
 

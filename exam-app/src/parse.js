@@ -48,6 +48,7 @@ async function readPages(doc) {
 function parseQuestions(examPages, warnings) {
   const questions = [];
   let cur = null;
+  let passage = '';
   for (const pg of examPages) {
     const mid = pg.w / 2;
     // 읽는 순서: 왼쪽 단 → 오른쪽 단, 단 안에서는 위→아래
@@ -57,13 +58,16 @@ function parseQuestions(examPages, warnings) {
       const colRight = col === 0 ? mid - 6 : pg.w - 24;
       let open = null; // 줄바꿈된 선지 문장까지 터치 영역을 넓히기 위한 현재 선지
       for (const line of groupLines(items)) {
+        const pm = /^\s*\[\s*(\d+\s*~\s*\d+)\s*\]/.exec(line.text);
+        if (pm) { passage = pm[1].replace(/\s+/g, ''); cur = null; } // 새 지문이 나오면 앞 문항 본문 수집 종료
+        const prevCur = cur; // 머리글 줄은 새 문항의 첫 줄로만 들어가도록, 줄 처리 후에 추가한다
         let header = false;
         let started = null;
         for (const it of line.items) {
           const m = /^\s*(\d{1,2})\.(?:\s|\(|$)/.exec(it.s);
           const expected = questions.length + 1;
           if (m && Number(m[1]) === expected) {
-            cur = { n: expected, p: pg.p, choices: [] };
+            cur = { n: expected, p: pg.p, passage, choices: [], _lines: [line.text.trim()] };
             questions.push(cur);
             header = true;
             continue;
@@ -85,6 +89,7 @@ function parseQuestions(examPages, warnings) {
             }
           }
         }
+        if (cur && cur === prevCur) cur._lines.push(line.text.trim());
         const first = line.items.find((i) => i.s.trim());
         if (started) {
           open = started;
@@ -102,6 +107,8 @@ function parseQuestions(examPages, warnings) {
     }
   }
   for (const q of questions) {
+    q.text = (q._lines || []).join(' ').replace(/\s+/g, ' ').slice(0, 500);
+    delete q._lines;
     for (const c of q.choices) delete c._y;
     if (q.choices.length !== 5) warnings.push(`${q.n}번 선지 ${q.choices.length}개`);
   }
@@ -248,7 +255,7 @@ function parseKey(keyPages, warnings) {
   return { key, score, shortAns, shortPts };
 }
 
-export const PARSER_V = 2;
+export const PARSER_V = 3;
 
 export async function parsePdf(doc) {
   const pages = await readPages(doc);

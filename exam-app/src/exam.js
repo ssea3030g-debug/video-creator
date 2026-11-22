@@ -3,6 +3,7 @@ import { openPdf } from './pdf.js';
 import { parsePdf, PARSER_V } from './parse.js';
 import { PEN_SIZE, strokePath, livePath, hitStroke } from './ink.js';
 import { grade } from './grade.js';
+import { buildReport } from './report.js';
 
 export const DEFAULT_MIN = 45;
 const MIN_ZOOM = 0.5;
@@ -1072,9 +1073,23 @@ export async function openExam(root, id, goBack) {
       <div class="ph"><b>결과</b><button data-a="closesheet">닫기</button></div>
       <div class="score"><span>${r.earned}</span> / ${r.total}점</div>
       <p class="muted center">정답 ${r.items.length - wrong.length} · 오답 ${wrong.length} ${noTimer ? '' : ` · 사용 시간 ${fmt(st.durationMs - st.remainingMs)}`}${parsed.hasKey ? '' : ' · 정답표가 없어 채점되지 않았습니다'}</p>
-      <div class="actions"><button data-a="retry">다시 풀기 (초기화)</button><button data-a="review" class="primary">시험지로 돌아가기</button></div>
+      <div class="actions"><button data-a="retry">다시 풀기 (초기화)</button>${parsed.hasKey ? '<button data-a="report" class="primary">AI 약점 분석 보고서</button>' : ''}<button data-a="review">시험지로 돌아가기</button></div>
       <table class="res"><thead><tr><th>문항</th><th>내 답</th><th>정답</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
+  }
+
+  function showReport() {
+    const r = st.result || grade(parsed, st);
+    const text = buildReport(rec, parsed, st, r);
+    sheet.dataset.kind = 'report';
+    sheet.hidden = false;
+    sheet.innerHTML = `<div class="panel wide">
+      <div class="ph"><b>AI 약점 분석 보고서</b><button data-a="closesheet">닫기</button></div>
+      <p class="muted small">아래 내용을 복사해서 분석 전용 대화(새 채팅)에 붙여넣거나, 파일로 받아 넘기세요. 틀린 문항과 본문 발췌만 들어 있습니다.</p>
+      <textarea id="rpt" readonly class="rpt">${esc(text)}</textarea>
+      <div class="actions"><button data-a="copy-report" class="primary">복사하기</button><button data-a="dl-report">파일로 받기</button><button data-a="result">결과로 돌아가기</button></div>
+    </div>`;
+    window.__report = text;
   }
 
   async function resetAll() {
@@ -1153,6 +1168,32 @@ export async function openExam(root, id, goBack) {
     }
     else if (a === 'closesheet' || a === 'review') sheet.hidden = true;
     else if (a === 'retry') resetAll();
+    else if (a === 'report') showReport();
+    else if (a === 'result') showResult();
+    else if (a === 'copy-report') {
+      const ta = root.querySelector('#rpt');
+      try {
+        await navigator.clipboard.writeText(ta.value);
+        toast('보고서를 복사했습니다');
+      } catch {
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand?.('copy');
+        toast(ok ? '보고서를 복사했습니다' : '길게 눌러 복사해 주세요');
+      }
+    }
+    else if (a === 'dl-report') {
+      const blob = new Blob([root.querySelector('#rpt').value], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${rec.name} 약점분석.md`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
   });
 
   setStatus();

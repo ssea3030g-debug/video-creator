@@ -94,5 +94,7 @@ table.res { width: 100%; border-collapse: collapse; margin-top: 10px; font-size:
 .bub.key { border: 2px dashed var(--ok); } .bub.bad { background: var(--bad); border-color: var(--bad); }
 .bub:disabled { opacity: .85; }
 .shorts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+.rpt { width: 100%; min-height: 320px; font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; padding: 10px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; color: var(--ink); background: #f9fafb; resize: vertical; }
 [hidden] { display: none !important; }
 @media (max-width: 720px) { .bar .title { order: 5; flex-basis: 100%; } }

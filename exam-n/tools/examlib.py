@@ -36,7 +36,9 @@ def parse_questions(text):
             cur_set = {"id": int(m.group(1)), "range": m.group(2), "passage": m.group(3)}
             cur = None
             continue
-        m = re.match(r"^\*\*(\d+)\.\s*(.+?)\*\*\s*$", line) or re.match(r"^#{2,4}\s*(\d+)\.\s*(.+)$", line)
+        m = (re.match(r"^\*\*(\d+)\.\s*(.+?)\*\*\s*$", line)      # **1. 발문 [2.7점]**
+             or re.match(r"^\*\*(\d+)\.\*\*\s*(.+)$", line)          # **1.** 발문 [2.7점]
+             or re.match(r"^#{2,4}\s*(\d+)\.\s*(.+)$", line))           # ### 1. 발문
         if m:
             stem_raw = m.group(2)
             sm = re.search(r"\[(\d+(?:\.\d+)?)점\]", stem_raw)
@@ -59,6 +61,8 @@ def parse_questions(text):
         if m:
             cur["opts"].append(strip_md(m.group(2)))
             continue
+        if re.fullmatch(r"<\s*보\s*기\s*>", line.strip()):
+            continue
         if line.startswith(">"):
             t = strip_md(line.lstrip("> ").strip())
             if t and not re.fullmatch(r"<\s*보\s*기\s*>", t):
@@ -73,6 +77,12 @@ def parse_key(text, n_hint=None):
     key = {}
     for m in re.finditer(r"^\*\*(\d+)\.\s*([①②③④⑤])\*\*", text, re.M):
         key[int(m.group(1))] = CIRC.index(m.group(2)) + 1
+    for m in re.finditer(r"^#{2,4}\s*(\d+)번\s*[—\-:]+\s*정답\s*([①②③④⑤])", text, re.M):   # ### 1번 — 정답 ③
+        key.setdefault(int(m.group(1)), CIRC.index(m.group(2)) + 1)
+    sec = re.search(r"^#{2,3}\s*정답표.*?$(.*?)(?=^#{1,3}\s|\Z)", text, re.M | re.S)       # ## 정답표: 1 ③ / 2 ④
+    if sec:
+        for m in re.finditer(r"(\d+)\s*[.:)]?\s*([①②③④⑤])", sec.group(1)):
+            key.setdefault(int(m.group(1)), CIRC.index(m.group(2)) + 1)
     lines = text.splitlines()
     for i in range(len(lines) - 2):
         a, c = lines[i], lines[i + 2]
@@ -102,7 +112,7 @@ def parse_levels(text):
     """해설의 `난이도: L3 (A2 B1 C1 D1 E0, 합5)` -> {번호: (L, [A,B,C,D,E], 합 또는 None)}"""
     out, cur = {}, None
     for line in text.splitlines():
-        m = re.match(r"^\*\*(\d+)\.", line)
+        m = re.match(r"^\*\*(\d+)\.", line) or re.match(r"^#{2,4}\s*(\d+)번", line)
         if m:
             cur = int(m.group(1))
         m = re.search(r"난이도:\s*L(\d)\s*\(\s*A(\d)\s*B(\d)\s*C(\d)\s*D(\d)\s*E(\d)(?:[^)]*합\s*(\d+))?", line)

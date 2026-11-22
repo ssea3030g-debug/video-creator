@@ -78,7 +78,7 @@ def parse_cards(text):
             continue
         n = int(m.group(1))
         seg = line.split("오답 기법", 1)[1].lstrip(":： ")
-        seg = re.split(r"\s\|\s", seg, 1)[0]
+        seg = re.split(r"\s\|\s", seg, maxsplit=1)[0]
         toks = [t for t in re.split(r"[①②③④⑤]|,|;|·|/", seg) if t.strip()]
         ground = ""
         gm = re.search(r"근거\s*[:：]\s*([^|]+)", line)
@@ -170,13 +170,13 @@ def main():
         # 난이도 태그 정직화
         lv = levels.get(n)
         if lv:
-            L_tag, axes, tot = lv
+            L_tag, axes, tot, ded = lv
             real = sum(axes)
-            r["L"] = level_from_sum(real)
+            r["L"] = max(1, level_from_sum(real) - ded)
             if tot is not None and tot != real:
                 flags[n].append(f"L 합 표기 {tot} ≠ 5축 합 {real}")
-            if level_from_sum(real) != L_tag:
-                flags[n].append(f"L 태그 L{L_tag} ≠ 5축 합 {real}의 L{level_from_sum(real)}")
+            if max(1, level_from_sum(real) - ded) != L_tag:
+                flags[n].append(f"L 태그 L{L_tag} ≠ 5축 합 {real}(감점 {ded})의 L{max(1, level_from_sum(real) - ded)}")
         rows.append(r)
 
         # S4 카드

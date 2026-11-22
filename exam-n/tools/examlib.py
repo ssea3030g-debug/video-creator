@@ -109,16 +109,16 @@ def key_from_string(s, numbers):
 
 
 def parse_levels(text):
-    """해설의 `난이도: L3 (A2 B1 C1 D1 E0, 합5)` -> {번호: (L, [A,B,C,D,E], 합 또는 None)}"""
+    """해설의 `난이도: L3 (A2 B1 C1 D1 E0, 합5)` -> {번호: (L, [A,B,C,D,E], 합 또는 None, 감점 단계)}  (태그에 `감점 1단계` 가능)"""
     out, cur = {}, None
     for line in text.splitlines():
         m = re.match(r"^\*\*(\d+)\.", line) or re.match(r"^#{2,4}\s*(\d+)번", line)
         if m:
             cur = int(m.group(1))
-        m = re.search(r"난이도:\s*L(\d)\s*\(\s*A(\d)\s*B(\d)\s*C(\d)\s*D(\d)\s*E(\d)(?:[^)]*합\s*(\d+))?", line)
+        m = re.search(r"난이도:\s*L(\d)\s*\(\s*A(\d)\s*B(\d)\s*C(\d)\s*D(\d)\s*E(\d)(?:[^)]*합\s*(\d+))?(?:[^)]*감점\s*(\d+))?", line)
         if m and cur is not None:
             axes = [int(m.group(i)) for i in range(2, 7)]
-            out[cur] = (int(m.group(1)), axes, int(m.group(7)) if m.group(7) else None)
+            out[cur] = (int(m.group(1)), axes, int(m.group(7)) if m.group(7) else None, int(m.group(8)) if m.group(8) else 0)
     return out
 
 

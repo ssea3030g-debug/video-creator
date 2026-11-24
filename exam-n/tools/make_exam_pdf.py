@@ -92,6 +92,8 @@ def question_html(qb):
     out.append("</div>")
     return "\n".join(out)
 
+FIRSTN, LASTN = 1, 1
+
 def build_exam_html(body, passage, setline, fig_b64, nq):
     ps = []
     for i, p in enumerate(passage):
@@ -105,7 +107,7 @@ def build_exam_html(body, passage, setline, fig_b64, nq):
           '<td style="width:9%">부장</td><td style="width:9%">교감</td><td style="width:9%">교장</td></tr>'
           '<tr><td>출제자</td><td></td><td></td><td></td><td></td><td></td><td></td></tr></table>')
     inst = ('<div class="inst">※반, 번호, 이름, 과목코드(' + digits_box("01") + ')를 입력하시오.<br>'
-            f'※선택형 ({nq}) 문항 ({digits_box("01")}번~{digits_box(f"{nq:02d}")}번)임.</div>')
+            f'※선택형 ({nq}) 문항 ({digits_box(f"{FIRSTN:02d}")}번~{digits_box(f"{LASTN:02d}")}번)임.</div>')
     qs = re.split(r"(?=^\*\*\d+\. )", body, flags=re.M)[1:]
     parts = [f"<html><head><meta charset='utf-8'><style>{CSS}</style></head><body><div class='cols'>", hd, inst,
              f'<div class="set">{esc(setline)}</div>', '<div class="psg">' + "".join(ps) + "</div>"]
@@ -155,8 +157,8 @@ def overlay(src, dst, title, badge_mode, two_col, last_note):
         if two_col:  # 1쪽은 결재칸 표 아래(Hh-105)부터, 나머지는 머리말 선 아래부터
             c.setLineWidth(.6); c.line(W / 2, Hh - (105 if pg == 1 else 61), W / 2, 62)
         c.setFont("G", 8.6)
-        c.drawString(40, 43, "이 시험문제의 저작권은 학교에 있습니다.")
-        c.drawString(40, 31, "저작권법에 의해 보호받는 저작물이므로 전재와 복제는 금지되며, 이를 어길 시 저작권법에 의거 처벌될 수 있습니다.")
+        c.drawString(40, 43, "연습용 문제지입니다.")
+        c.drawString(40, 31, "정답과 해설은 별도 파일에 있습니다.")
         if last_note and pg < n:
             c.setFont("WQY" if HAS_HAND else "G", 8.6); c.drawRightString(W - 31, 43, "☞다음 면에 계속" if HAS_HAND else "다음 면에 계속")
         c.showPage()
@@ -169,19 +171,37 @@ def overlay(src, dst, title, badge_mode, two_col, last_note):
 
 def build(qmd, pmd, out, title, setline, fig=None):
     body, _, ans = open(qmd, encoding="utf-8").read().partition("# 정답과 해설")
-    passage = open(pmd, encoding="utf-8").read().split("\n\n", 1)[1].strip().split("\n\n")
-    nq = len(re.findall(r"^\*\*\d+\. ", body, flags=re.M))
+    body = re.sub(r"^\*\*(\d+)\.\*\* (.+?)\s*$", lambda m: f"**{m.group(1)}. {m.group(2)}**", body, flags=re.M)  # **1.** 발문 → **1. 발문**
+    out_l, inb = [], False  # '<보기>' 줄 아래 일반 문단을 '> ' 인용(보기 상자)으로 바꾼다
+    for l in body.split("\n"):
+        if l.strip() == "<보기>": inb = True; continue
+        if inb:
+            if re.match(r"^[①②③④⑤]", l): inb = False; out_l.append(l)
+            else: out_l.append(("> " + l) if l.strip() else ">")
+            continue
+        out_l.append(l)
+    body = "\n".join(out_l)
+    ptxt = open(pmd, encoding="utf-8").read().strip()
+    if ptxt.startswith("#"):
+        ptxt = ptxt.split("\n\n", 1)[1].strip()  # 제목 줄이 있으면 제외, 없으면 첫 문단 보존
+    passage = ptxt.split("\n\n")
+    nums = [int(x) for x in re.findall(r"^\*\*(\d+)\.", body, flags=re.M)]
+    nq = len(nums)
+    global FIRSTN, LASTN
+    FIRSTN, LASTN = (nums[0], nums[-1]) if nums else (1, 1)
     fig_b64 = base64.b64encode(open(fig, "rb").read()).decode() if fig else None
     d = tempfile.mkdtemp()
     open(f"{d}/q.html", "w", encoding="utf-8").write(build_exam_html(body, passage, setline, fig_b64, nq))
     scores = re.findall(r"^\*\*\d+\. .*?\[([\d.]+)점\]", body, flags=re.M)
-    open(f"{d}/a.html", "w", encoding="utf-8").write(build_ans_html(ans, scores))
-    chrome_pdf(f"{d}/q.html", f"{d}/q0.pdf"); chrome_pdf(f"{d}/a.html", f"{d}/a0.pdf")
+    chrome_pdf(f"{d}/q.html", f"{d}/q0.pdf")
     overlay(f"{d}/q0.pdf", f"{d}/q1.pdf", title, "num", True, True)
-    overlay(f"{d}/a0.pdf", f"{d}/a1.pdf", title + " 정답·해설", "teacher", False, False)
     w = PdfWriter()
-    for f in (f"{d}/q1.pdf", f"{d}/a1.pdf"):
-        for p in PdfReader(f).pages: w.add_page(p)
+    for p in PdfReader(f"{d}/q1.pdf").pages: w.add_page(p)
+    if ans.strip():  # 정답·해설이 있을 때만 정답 쪽을 붙인다(사람 검증용 문제지는 정답 쪽 없음)
+        open(f"{d}/a.html", "w", encoding="utf-8").write(build_ans_html(ans, scores))
+        chrome_pdf(f"{d}/a.html", f"{d}/a0.pdf")
+        overlay(f"{d}/a0.pdf", f"{d}/a1.pdf", title + " 정답·해설", "teacher", False, False)
+        for p in PdfReader(f"{d}/a1.pdf").pages: w.add_page(p)
     with open(out, "wb") as f: w.write(f)
     shutil.rmtree(d)
 

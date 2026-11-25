@@ -44,7 +44,7 @@ export async function openExam(root, id, goBack) {
   const buf = await db.get('files', id);
   if (!rec || !buf) return goBack();
   const doc = await openPdf(buf);
-  if (rec.parsed.v !== PARSER_V) {
+  if (rec.parsed.v !== PARSER_V && !rec.manual) {
     // 분석 규칙이 바뀐 경우: 저장된 PDF로 조용히 다시 분석
     rec.parsed = await parsePdf(doc);
     await db.put('papers', id, rec);

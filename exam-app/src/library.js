@@ -1,21 +1,38 @@
 import * as db from './db.js';
 import { openPdf } from './pdf.js';
-import { parsePdf } from './parse.js';
+import { parsePdf, PARSER_V } from './parse.js';
 import { newState, fmt } from './exam.js';
 
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// 정답을 직접 준 시험지(글자 정보가 없는 PDF): 문항 수와 정답만 쓰고, 선지 위치는 없다 → 답안지 패널로 마킹
+async function manualParsed(doc, answers) {
+  const pageSizes = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const v = (await doc.getPage(p)).getViewport({ scale: 1 });
+    pageSizes.push([v.width, v.height]);
+  }
+  const per = Math.ceil(answers.length / doc.numPages);
+  const questions = answers.map((a, i) => ({
+    n: i + 1, p: Math.min(doc.numPages, Math.floor(i / per) + 1), choices: [], answer: a, pts: 1, passage: '', text: '',
+  }));
+  return {
+    v: PARSER_V, numPages: doc.numPages, examPages: doc.numPages, hasKey: true, questions, shorts: [],
+    total: answers.length, warnings: ['선지 위치를 찾지 못해 답안지(OMR)에서 마킹합니다'], pageSizes, manual: true,
+  };
+}
 
 export async function addPaper(file, opts = {}) {
   const buf = await file.arrayBuffer();
   const id = await db.sha(buf);
   if (await db.get('papers', id)) return { id, dup: true }; // 같은 파일: 파싱 결과 재사용
   const doc = await openPdf(buf);
-  const parsed = await parsePdf(doc);
+  const parsed = opts.answers ? await manualParsed(doc, opts.answers) : await parsePdf(doc);
   doc.destroy?.();
   if (!parsed.questions.length) throw new Error('문항을 찾지 못했습니다. 번호(1. 2. …)와 ①~⑤ 선지가 있는 텍스트 PDF인지 확인해 주세요.');
   await db.put('files', id, buf);
   const name = opts.name || file.name.replace(/\.pdf$/i, '');
-  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '', order: opts.order });
+  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '', order: opts.order, manual: !!opts.answers });
   return { id, dup: false, parsed };
 }
 
@@ -54,7 +71,7 @@ export async function seedBuiltin(onProgress) {
       if (!res.ok) continue;
       const blob = await res.blob();
       const file = new File([blob], item.file.split('/').pop(), { type: 'application/pdf' });
-      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file, order: i });
+      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file, order: i, answers: item.answers });
       await db.put('state', key, true);
     } catch (err) {
       console.error(err);

@@ -20,6 +20,11 @@
     "group": "mock"
   },
   {
+    "file": "papers/paper-1-2.pdf",
+    "name": "독서 모의고사 v6 (선지 보완판)",
+    "group": "mock"
+  },
+  {
     "file": "papers/paper-4.pdf",
     "name": "독서 모의고사 v2 (보완 전)",
     "group": "mock",

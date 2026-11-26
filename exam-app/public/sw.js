@@ -1,5 +1,5 @@
 // 앱 셸 캐시: 한 번 열어 두면 오프라인에서도 실행됩니다. (시험지 데이터는 IndexedDB에 저장)
-const CACHE = 'exam-app-v1';
+const CACHE = 'exam-app-v2';
 self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) =>
   e.waitUntil(

@@ -24,6 +24,9 @@
   ```
 - 이미 있으면(`ffmpeg -version`이 7 이상, `~/lemo-opuscar` 존재) 다시 설치하지 않는다.
 
+## 그래피파이
+- 코드·문서의 구조, 아키텍처, 파일 관계, 프로젝트 내용에 대한 질문이 들어오면 **항상 먼저 `/graphify`(Skill `graphify`)를 실행**한다. `graphify-out/`이 있으면 그래프 질의부터 한다.
+
 ## 시험지 풀이 앱
 - `exam-app/`: 시험지 PDF를 올려 45분 타이머로 푸는 PWA (펜슬 필기·마킹·자동 채점). 설명·실행법은 `exam-app/README.md`. 파서 규칙은 `exam-app/src/parse.js`.
 

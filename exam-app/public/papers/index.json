@@ -71,5 +71,35 @@
     "name": "N제 2차 · 예술",
     "group": "nje",
     "noTimer": true
+  },
+  {
+    "file": "papers/paper-7-1.pdf",
+    "name": "N제 3차 · 인문",
+    "group": "nje",
+    "noTimer": true
+  },
+  {
+    "file": "papers/paper-7-2.pdf",
+    "name": "N제 3차 · 사회(법)",
+    "group": "nje",
+    "noTimer": true
+  },
+  {
+    "file": "papers/paper-7-3.pdf",
+    "name": "N제 3차 · 사회(경제·정치)",
+    "group": "nje",
+    "noTimer": true
+  },
+  {
+    "file": "papers/paper-7-4.pdf",
+    "name": "N제 3차 · 과학·기술",
+    "group": "nje",
+    "noTimer": true
+  },
+  {
+    "file": "papers/paper-7-5.pdf",
+    "name": "N제 3차 · 예술",
+    "group": "nje",
+    "noTimer": true
   }
 ]

@@ -214,7 +214,7 @@ export async function openLibrary(root, go) {
     };
     let html = await cards(shown);
     if (view === 'mock') {
-      html += `<p class="muted small todo">준비 중: v2 보완 · v5 보완 · v6 보완 (파일이 올라오면 추가됩니다)</p>`;
+      html += `<p class="muted small todo">준비 중: v6 보완 (파일이 올라오면 추가됩니다)</p>`;
       if (hidden.length) {
         html += `<button class="ghost" data-act="toggle-hidden">${showHidden ? '보완 전 시험지 숨기기' : `보완 전 시험지 보기 (${hidden.length})`}</button>`;
         if (showHidden) html += `<h3 class="sub">보완 전 시험지</h3>` + (await cards(hidden));

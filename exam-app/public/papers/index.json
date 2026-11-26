@@ -1,5 +1,10 @@
 [
   {
+    "file": "papers/paper-4-2.pdf",
+    "name": "독서 모의고사 v2 (선지 보완판)",
+    "group": "mock"
+  },
+  {
     "file": "papers/paper-3.pdf",
     "name": "독서 모의고사 v3 (v2의 쉬운 버전)",
     "group": "mock"
@@ -7,6 +12,11 @@
   {
     "file": "papers/paper-6.pdf",
     "name": "독서 모의고사 v4",
+    "group": "mock"
+  },
+  {
+    "file": "papers/paper-2-2.pdf",
+    "name": "독서 모의고사 v5 (선지 보완판)",
     "group": "mock"
   },
   {

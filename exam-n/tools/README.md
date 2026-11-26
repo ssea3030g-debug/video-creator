@@ -8,6 +8,8 @@
 | `make_exam_pdf.py`, `make_exam_multi.py` | md → 시험지 PDF | 0 |
 | `examlib.py` | 위 스크립트의 문항 md 파서 | — |
 | `import_exam.py` | 2단 시험지 PDF(`pdf`)·모의고사 md(`md`) → examlib 형식 변환. 결과는 /tmp에만 둘 것(학교 저작물) | 0 |
+| `diff_pdf_md.py` | 앱 PDF와 작업 md가 같은 문항인지 대조(보완 전 필수) | 0 |
+| `app_parse_check.mjs` | 앱 분석기로 PDF의 문항·정답·단답형·100점·경고 확인(exam-app에서 `npm ci` 후) | 0 |
 | `calib_report.py` | 맹검·check_hard 결과 JSON → 자료별 비교표·문항별 JSON(`sets/calib/`) | 0 |
 
 모두 표준 라이브러리만 쓴다. 실행은 `python3 -I`.

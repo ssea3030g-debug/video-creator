@@ -22,6 +22,10 @@ def pdf_stream(pdf, cols=297):
     npages = int(re.search(r"Pages:\s*(\d+)", info).group(1))
     lines = []
     for p in range(1, npages + 1):
+        # 정답·해설 쪽부터는 문항이 아니므로 읽지 않는다(선지 기호가 해설에도 나온다)
+        head = subprocess.run(["pdftotext", "-f", str(p), "-l", str(p), pdf, "-"], capture_output=True, text=True).stdout[:300]
+        if "정답과 해설" in head or "정답·해설" in head:
+            break
         for x, w in ((0, cols + 1), (cols, 300)):
             t = subprocess.run(["pdftotext", "-f", str(p), "-l", str(p), "-x", str(x), "-y", "0", "-W", str(w),
                                 "-H", "842", pdf, "-"], capture_output=True, text=True).stdout
@@ -56,7 +60,7 @@ def split_pdf(lines):
             cur["passage"].append(ln)
         elif mode == "skip" or q is None:
             continue
-        elif ln[0] in CIRC:
+        elif ln[0] in CIRC and len(q["opts"]) < 5:
             q["opts"].append(ln[1:].strip())
             mode = "opts"
         elif mode == "opts":

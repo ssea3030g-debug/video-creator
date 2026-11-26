@@ -32,7 +32,7 @@ export async function addPaper(file, opts = {}) {
   if (!parsed.questions.length) throw new Error('문항을 찾지 못했습니다. 번호(1. 2. …)와 ①~⑤ 선지가 있는 텍스트 PDF인지 확인해 주세요.');
   await db.put('files', id, buf);
   const name = opts.name || file.name.replace(/\.pdf$/i, '');
-  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '', order: opts.order, manual: !!opts.answers });
+  await db.put('papers', id, { id, name, addedAt: Date.now(), parsed, noTimer: !!opts.noTimer, src: opts.src || '', order: opts.order, manual: !!opts.answers, group: opts.group || 'mock', hidden: !!opts.hidden });
   return { id, dup: false, parsed };
 }
 
@@ -52,8 +52,9 @@ export async function seedBuiltin(onProgress) {
   for (const rec of await db.all('papers')) {
     const hit = byFile.get(rec.src);
     if (!hit) continue;
-    if (hit.it.name !== rec.name || rec.order !== hit.order) {
-      await db.put('papers', rec.id, { ...rec, name: hit.it.name, order: hit.order });
+    const group = hit.it.group || 'mock';
+    if (hit.it.name !== rec.name || rec.order !== hit.order || rec.group !== group || !!rec.hidden !== !!hit.it.hidden) {
+      await db.put('papers', rec.id, { ...rec, name: hit.it.name, order: hit.order, group, hidden: !!hit.it.hidden });
     }
   }
   for (const rec of await db.all('papers')) {
@@ -71,7 +72,7 @@ export async function seedBuiltin(onProgress) {
       if (!res.ok) continue;
       const blob = await res.blob();
       const file = new File([blob], item.file.split('/').pop(), { type: 'application/pdf' });
-      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file, order: i, answers: item.answers });
+      await addPaper(file, { name: item.name, noTimer: item.noTimer, src: item.file, order: i, answers: item.answers, group: item.group, hidden: item.hidden });
       await db.put('state', key, true);
     } catch (err) {
       console.error(err);
@@ -104,19 +105,71 @@ function statusText(st, noTimer) {
   return ['완료', st.result ? `${st.result.earned} / ${st.result.total}점` : ''];
 }
 
+// 도트(픽셀) 로고: 12×12 격자
+const PIX_COLOR = { k: '#1f2937', w: '#ffffff', r: '#dc2626', b: '#2563eb', y: '#f59e0b' };
+const LOGO = {
+  paper: [
+    '............',
+    '..kkkkkkkk..',
+    '..kwwwwwwk..',
+    '..kwrrrwwk..',
+    '..kwwrwwwk..',
+    '..kwrwrwwk..',
+    '..kwwrwwwk..',
+    '..kwwwwwwk..',
+    '..kwbbbbwk..',
+    '..kkkkkkkk..',
+    '............',
+    '............',
+  ],
+  nje: [
+    '............',
+    '..kkkkkkkk..',
+    '..kbbbbbbk..',
+    '..kbwwwwbk..',
+    '..kbbbbbbk..',
+    '..kyyyyyyk..',
+    '..kyyyyyyk..',
+    '..kwwwwwwk..',
+    '..kbbbbbbk..',
+    '..kkkkkkkk..',
+    '............',
+    '............',
+  ],
+};
+function pixelLogo(name) {
+  const rows = LOGO[name];
+  let rects = '';
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch !== '.') rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${PIX_COLOR[ch]}"/>`;
+  }));
+  return `<svg class="pixlogo" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+}
+
+const SESSIONS = {
+  mock: { title: '시험지', sub: '독서 모의고사' },
+  nje: { title: 'N제', sub: '고난도 N제 (파트별)' },
+};
+
 export async function openLibrary(root, go) {
+  let view = null; // null = 세션 선택, 'mock' | 'nje'
+  let showHidden = false;
   root.innerHTML = `
   <div class="lib">
-    <header class="libbar"><h1>시험지</h1>
-      <label class="primary filebtn">+ 시험지 추가<input id="file" type="file" accept="application/pdf,.pdf" multiple hidden></label>
+    <header class="libbar">
+      <h1 id="title">시험지 풀이</h1>
+      <div class="libbtns">
+        <button id="back" hidden>‹ 세션</button>
+        <label class="primary filebtn" id="addbtn">+ 시험지 추가<input id="file" type="file" accept="application/pdf,.pdf" multiple hidden></label>
+      </div>
     </header>
     <div id="msg" class="msg" hidden></div>
     <div id="seed" class="msg" hidden></div>
-    <div id="list" class="list"></div>
-    <div class="drop" id="drop">PDF를 여기에 끌어다 놓아도 됩니다</div>
+    <div id="body"></div>
   </div>`;
-  const msg = root.querySelector('#msg');
-  const list = root.querySelector('#list');
+  const $ = (q) => root.querySelector(q);
+  const msg = $('#msg');
+  const body = $('#body');
   const say = (t, bad) => {
     msg.hidden = !t;
     msg.textContent = t || '';
@@ -124,17 +177,31 @@ export async function openLibrary(root, go) {
   };
 
   async function refresh() {
-    const papers = (await db.all('papers')).sort((a, b) => (a.order ?? 1e6) - (b.order ?? 1e6) || b.addedAt - a.addedAt);
-    if (!papers.length) {
-      list.innerHTML = '<p class="empty">아직 시험지가 없습니다.<br>본문과 정답·해설이 함께 있는 PDF를 추가해 보세요.</p>';
+    const all = (await db.all('papers')).sort((a, b) => (a.order ?? 1e6) - (b.order ?? 1e6) || b.addedAt - a.addedAt);
+    const groupOf = (p) => p.group || 'mock';
+    $('#title').textContent = view ? SESSIONS[view].title : '시험지 풀이';
+    $('#back').hidden = !view;
+    $('#addbtn').hidden = view === 'nje';
+
+    if (!view) {
+      const mockN = all.filter((p) => groupOf(p) === 'mock' && !p.hidden).length;
+      const njeN = all.filter((p) => groupOf(p) === 'nje').length;
+      body.innerHTML = `<div class="sessions">
+        <button class="sess" data-sess="mock">${pixelLogo('paper')}<b>시험지</b><span>${SESSIONS.mock.sub} · ${mockN}개</span></button>
+        <button class="sess" data-sess="nje">${pixelLogo('nje')}<b>N제</b><span>${SESSIONS.nje.sub} · ${njeN}개</span></button>
+      </div>`;
       return;
     }
-    const states = await Promise.all(papers.map((p) => db.get('state', p.id)));
-    list.innerHTML = papers
-      .map((p, i) => {
+
+    const shown = all.filter((p) => groupOf(p) === view && !p.hidden);
+    const hidden = all.filter((p) => groupOf(p) === view && p.hidden);
+    const cards = async (list) => {
+      if (!list.length) return '<p class="empty">아직 시험지가 없습니다.</p>';
+      const states = await Promise.all(list.map((p) => db.get('state', p.id)));
+      return list.map((p, i) => {
+        const q = p.parsed;
         const [badge, extra0] = statusText(states[i], p.noTimer);
         const extra = [p.noTimer && badge === '미시작' ? '타이머 없음' : '', extra0].filter(Boolean).join(' · ');
-        const q = p.parsed;
         const warn = q.warnings.length ? `<div class="warn">⚠ ${esc(q.warnings.join(' · '))}</div>` : '';
         const action = badge === '완료' ? '결과 보기' : badge === '미시작' ? '풀기' : '이어하기';
         return `<div class="card paper" data-id="${p.id}" data-src="${esc(p.src || '')}" data-name="${esc(p.name)}">
@@ -143,42 +210,31 @@ export async function openLibrary(root, go) {
           ${warn}
           <div class="actions"><button class="primary" data-act="open">${action}</button><button data-act="pdf">PDF 받기</button><button data-act="reset">초기화</button><button data-act="del">삭제</button></div>
         </div>`;
-      })
-      .join('');
-  }
-
-  async function handleFiles(files) {
-    say('');
-    for (const f of files) {
-      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { say(`${f.name}: PDF 파일만 올릴 수 있습니다.`, true); continue; }
-      say(`${f.name} 분석 중…`);
-      try {
-        const r = await addPaper(f);
-        say(r.dup ? `${f.name}: 이미 추가된 시험지입니다.` : '');
-      } catch (err) {
-        console.error(err);
-        say(`${f.name}: ${err.message}`, true);
+      }).join('');
+    };
+    let html = await cards(shown);
+    if (view === 'mock') {
+      html += `<p class="muted small todo">준비 중: v2 보완 · v5 보완 · v6 보완 (파일이 올라오면 추가됩니다)</p>`;
+      if (hidden.length) {
+        html += `<button class="ghost" data-act="toggle-hidden">${showHidden ? '보완 전 시험지 숨기기' : `보완 전 시험지 보기 (${hidden.length})`}</button>`;
+        if (showHidden) html += `<h3 class="sub">보완 전 시험지</h3>` + (await cards(hidden));
       }
     }
-    refresh();
+    body.innerHTML = html;
   }
 
-  root.querySelector('#file').addEventListener('change', (e) => { handleFiles([...e.target.files]); e.target.value = ''; });
-  const drop = root.querySelector('#drop');
-  for (const ev of ['dragover', 'dragenter']) addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('on'); });
-  addEventListener('dragleave', () => drop.classList.remove('on'));
-  addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('on'); handleFiles([...(e.dataTransfer?.files || [])]); });
-
-  list.addEventListener('click', async (e) => {
+  body.addEventListener('click', async (e) => {
+    const sess = e.target.closest('[data-sess]')?.dataset.sess;
+    if (sess) { view = sess; showHidden = false; say(''); return refresh(); }
+    if (e.target.closest('[data-act=toggle-hidden]')) { showHidden = !showHidden; return refresh(); }
     const act = e.target.closest('[data-act]')?.dataset.act;
-    const id = e.target.closest('.paper')?.dataset.id;
+    const card = e.target.closest('.paper');
+    const id = card?.dataset.id;
     if (!act || !id) return;
     if (act === 'open') go(`#/e/${id}`);
     else if (act === 'pdf') {
-      const card = e.target.closest('.paper');
       const src = card.dataset.src;
       if (src) {
-        // 기본 시험지: 배포된 파일을 그대로 내려받기 (브라우저가 바로 받음)
         const a = document.createElement('a');
         a.href = src;
         a.download = `${card.dataset.name}.pdf`;
@@ -188,8 +244,7 @@ export async function openLibrary(root, go) {
       } else {
         await downloadPdf(id, card.dataset.name || 'exam');
       }
-    }
-    else if (act === 'reset') {
+    } else if (act === 'reset') {
       if (confirm('이 시험지의 필기·마킹·기록을 지우고 처음 상태로 되돌립니다.')) { await db.put('state', id, newState()); refresh(); }
     } else if (act === 'del') {
       if (confirm('시험지를 삭제합니다. 필기와 기록도 함께 지워집니다.')) {
@@ -199,8 +254,29 @@ export async function openLibrary(root, go) {
     }
   });
 
+  $('#back').addEventListener('click', () => { view = null; say(''); refresh(); });
+
+  async function handleFiles(files) {
+    say('');
+    for (const f of files) {
+      if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { say(`${f.name}: PDF 파일만 올릴 수 있습니다.`, true); continue; }
+      say(`${f.name} 분석 중…`);
+      try {
+        const r = await addPaper(f, { group: 'mock' });
+        say(r.dup ? `${f.name}: 이미 추가된 시험지입니다.` : '');
+      } catch (err) {
+        console.error(err);
+        say(`${f.name}: ${err.message}`, true);
+      }
+    }
+    refresh();
+  }
+  $('#file').addEventListener('change', (e) => { handleFiles([...e.target.files]); e.target.value = ''; });
+  addEventListener('drop', (e) => { if (view === 'mock') { e.preventDefault(); handleFiles([...(e.dataTransfer?.files || [])]); } });
+  addEventListener('dragover', (e) => { if (view === 'mock') e.preventDefault(); });
+
   await refresh();
-  const seedMsg = root.querySelector('#seed');
+  const seedMsg = $('#seed');
   seedBuiltin((t) => {
     seedMsg.hidden = !t;
     seedMsg.textContent = t;

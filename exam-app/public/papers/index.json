@@ -1,47 +1,60 @@
 [
   {
-    "file": "papers/paper-4.pdf",
-    "name": "독서 모의고사 v2"
-  },
-  {
     "file": "papers/paper-3.pdf",
-    "name": "독서 모의고사 v3 (v2의 쉬운 버전)"
+    "name": "독서 모의고사 v3 (v2의 쉬운 버전)",
+    "group": "mock"
   },
   {
     "file": "papers/paper-6.pdf",
-    "name": "독서 모의고사 v4"
+    "name": "독서 모의고사 v4",
+    "group": "mock"
+  },
+  {
+    "file": "papers/paper-4.pdf",
+    "name": "독서 모의고사 v2 (보완 전)",
+    "group": "mock",
+    "hidden": true
   },
   {
     "file": "papers/paper-2.pdf",
-    "name": "독서 모의고사 v5"
+    "name": "독서 모의고사 v5 (보완 전)",
+    "group": "mock",
+    "hidden": true
   },
   {
     "file": "papers/paper-1.pdf",
-    "name": "독서 모의고사 v6"
+    "name": "독서 모의고사 v6 (보완 전)",
+    "group": "mock",
+    "hidden": true
   },
   {
     "file": "papers/paper-5-1.pdf",
     "name": "N제 2차 · 인문",
+    "group": "nje",
     "noTimer": true
   },
   {
     "file": "papers/paper-5-2.pdf",
     "name": "N제 2차 · 사회(법)",
+    "group": "nje",
     "noTimer": true
   },
   {
     "file": "papers/paper-5-3.pdf",
     "name": "N제 2차 · 사회(경제·정치)",
+    "group": "nje",
     "noTimer": true
   },
   {
     "file": "papers/paper-5-4.pdf",
     "name": "N제 2차 · 과학·기술",
+    "group": "nje",
     "noTimer": true
   },
   {
     "file": "papers/paper-5-5.pdf",
     "name": "N제 2차 · 예술",
+    "group": "nje",
     "noTimer": true
   }
 ]

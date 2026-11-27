@@ -214,7 +214,6 @@ export async function openLibrary(root, go) {
     };
     let html = await cards(shown);
     if (view === 'mock') {
-      html += `<p class="muted small todo">준비 중: v6 보완 (파일이 올라오면 추가됩니다)</p>`;
       if (hidden.length) {
         html += `<button class="ghost" data-act="toggle-hidden">${showHidden ? '보완 전 시험지 숨기기' : `보완 전 시험지 보기 (${hidden.length})`}</button>`;
         if (showHidden) html += `<h3 class="sub">보완 전 시험지</h3>` + (await cards(hidden));
@@ -272,8 +271,15 @@ export async function openLibrary(root, go) {
     refresh();
   }
   $('#file').addEventListener('change', (e) => { handleFiles([...e.target.files]); e.target.value = ''; });
-  addEventListener('drop', (e) => { if (view === 'mock') { e.preventDefault(); handleFiles([...(e.dataTransfer?.files || [])]); } });
-  addEventListener('dragover', (e) => { if (view === 'mock') e.preventDefault(); });
+  // 창 전역 이벤트는 화면을 다시 열 때마다 쌓이므로, 이전 화면의 리스너를 떼고 등록한다
+  if (window.__libDrop) {
+    removeEventListener('drop', window.__libDrop);
+    removeEventListener('dragover', window.__libOver);
+  }
+  window.__libDrop = (e) => { if (view === 'mock') { e.preventDefault(); handleFiles([...(e.dataTransfer?.files || [])]); } };
+  window.__libOver = (e) => { if (view === 'mock') e.preventDefault(); };
+  addEventListener('drop', window.__libDrop);
+  addEventListener('dragover', window.__libOver);
 
   await refresh();
   const seedMsg = $('#seed');

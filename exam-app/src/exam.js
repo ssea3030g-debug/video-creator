@@ -806,8 +806,13 @@ export async function openExam(root, id, goBack) {
 
   function onTouch(e) {
     if (e.type === 'touchstart') {
-      for (const t of e.changedTouches) if (scroller.contains(t.target) && !t.target.closest?.('input')) own.add(t.identifier);
-      document.activeElement?.blur?.();
+      let onInput = false;
+      for (const t of e.changedTouches) {
+        if (t.target.closest?.('input')) onInput = true;
+        else if (scroller.contains(t.target)) own.add(t.identifier);
+      }
+      // 입력칸을 다시 누른 경우는 키보드를 내리지 않는다
+      if (!onInput) document.activeElement?.blur?.();
     }
     // 화면에 없는 손가락 id는 정리
     const live = new Set([...e.touches].map((t) => t.identifier));
